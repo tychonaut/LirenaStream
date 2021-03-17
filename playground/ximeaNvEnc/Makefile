@@ -3,12 +3,8 @@ SOURCES=streamViewer.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
 PROGRAM=streamViewer
 CFLAGS=-g
+GSTMODULES=gstreamer-app-1.0 gstreamer-video-1.0
 
-ifeq ($(GST10), 1)
-	GSTMODULES=gstreamer-app-1.0 gstreamer-video-1.0
-else
-	GSTMODULES=gstreamer-app-0.10 gstreamer-interfaces-0.10
-endif
 
 all: $(PROGRAM)
 
@@ -22,4 +18,4 @@ clean:
 	rm -f $(PROGRAM) $(OBJECTS)
 
 install:
-	cp $(PROGRAM) ../../bin
+	cp $(PROGRAM) ../../bin/JetsonTX2/$(PROGRAM)
