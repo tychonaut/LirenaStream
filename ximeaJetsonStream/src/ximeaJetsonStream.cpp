@@ -157,21 +157,21 @@ void* videoDisplay(void*) {
 	        \-> hardware encode h264 -> stream per as RTP over UDP
    	*/
 	pipeline = gst_parse_launch(
-	    "appsrc is-live=TRUE name=streamViewer ! "                         
-	    " video/x-bayer ! "
-         //" queue ! "
+	    " appsrc is-live=TRUE name=streamViewer ! "                         
+	    "   video/x-bayer ! "
         " bayer2rgb ! "
         "   video/x-raw, format=(string)BGRx ! "
         " videoconvert ! "
         //" video/x-raw, format=(string)BGRx ! "
         //" queue ! "
-	    //" tee name=forkRaw2ShowNEnc ! "
+	    " tee name=forkRaw2ShowNEnc ! "
             " queue ! "
             " videoscale add-borders=TRUE ! "
             " capsfilter name=scale ! "
             VIDEOCONVERT " ! " 
             VIDEOSINK
-        /*    " forkRaw2ShowNEnc. ! "
+            
+            " forkRaw2ShowNEnc. ! "
             " queue ! "
             //" videoscale ! "
             //" video/x-raw, width=(int)3072, height=(int)3072 ! "
@@ -182,12 +182,12 @@ void* videoDisplay(void*) {
             //" video/x-raw(memory:NVMM), format=(string)I420 ! "
         
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
-            //" omxh264enc ! "
+            
             " h264parse ! "
             " queue ! "
             " rtph264pay ! "
             " udpsink host=192.168.0.169 port=5001 sync=false "
-            */
+            
             ,
 	     NULL);
 
