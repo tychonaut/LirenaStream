@@ -157,20 +157,18 @@ void* videoDisplay(void*) {
 	        \-> hardware encode h264 -> stream per as RTP over UDP
    	*/
 	pipeline = gst_parse_launch(
-	    "appsrc is-live=TRUE name=streamViewer ! "
-	                          //" video/x-bayer, format=(string)bggr ! "
+	    "appsrc is-live=TRUE name=streamViewer ! "                         
 	    " video/x-bayer ! "
-                            //" queue ! "
+         //" queue ! "
         " bayer2rgb ! "
         "   video/x-raw, format=(string)BGRx ! "
-        
         " videoconvert ! "
         //" video/x-raw, format=(string)BGRx ! "
         //" queue ! "
 	    //" tee name=forkRaw2ShowNEnc ! "
-        //    " queue ! "
+            " queue ! "
             " videoscale add-borders=TRUE ! "
-            //" capsfilter name=scale ! "
+            " capsfilter name=scale ! "
             VIDEOCONVERT " ! " 
             VIDEOSINK
         /*    " forkRaw2ShowNEnc. ! "
@@ -341,7 +339,7 @@ void* videoDisplay(void*) {
 							NULL);
 					*/		
 					
-					printf("DEBUG: Appsrc has bay caps!;\n");
+					printf("DEBUG: Appsrc has bayer caps!;\n");
 					caps = gst_caps_new_simple(
 							"video/x-bayer",
 							"format", G_TYPE_STRING, "bggr",
@@ -573,12 +571,18 @@ gboolean update_raw(GtkToggleButton *raw, ctrl_window *ctrl) {
 		roicy = maxcy;
 		roix0 = 0;
 		roiy0 = 0;
-		gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(ctrl->gain)), mingain, mingain, maxgain, 0.1, 1, 0);
+		
+		float midgain = (maxgain + mingain) * 0.5f;
+		
+		//gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(ctrl->gain)), mingain, mingain, maxgain, 0.1, 1, 0);
+		gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(ctrl->gain)), midgain, mingain, maxgain, 0.1, 1, 0);
 		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(ctrl->x0)), roix0, 0, maxcx-4, 2, 20, 0);
 		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(ctrl->y0)), roiy0, 0, maxcy-2, 2, 20, 0);
 		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(ctrl->cx)), roicx, 4, maxcx, 4, 20, 0);
 		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(ctrl->cy)), roicy, 2, maxcy, 2, 20, 0);
-		xiSetParamFloat(handle, XI_PRM_GAIN, mingain);
+		
+		//xiSetParamFloat(handle, XI_PRM_GAIN, mingain);
+		xiSetParamFloat(handle, XI_PRM_GAIN, midgain);
 		xiSetParamInt(handle, XI_PRM_OFFSET_X, roix0);
 		xiSetParamInt(handle, XI_PRM_OFFSET_Y, roiy0);
 		xiSetParamInt(handle, XI_PRM_WIDTH, roicx);
