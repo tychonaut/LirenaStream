@@ -158,34 +158,39 @@ void* videoDisplay(void*) {
    	*/
 	pipeline = gst_parse_launch(
 	    "appsrc is-live=TRUE name=streamViewer ! "
-	    " tee name=forkRaw2ShowNEnc ! "
-            " queue ! "
+	                          //" video/x-bayer, format=(string)bggr ! "
+	    " video/x-bayer ! "
+                            //" queue ! "
+        " bayer2rgb ! "
+        "   video/x-raw, format=(string)BGRx ! "
+        
+        " videoconvert ! "
+        //" video/x-raw, format=(string)BGRx ! "
+        //" queue ! "
+	    //" tee name=forkRaw2ShowNEnc ! "
+        //    " queue ! "
             " videoscale add-borders=TRUE ! "
-            " capsfilter name=scale ! "
+            //" capsfilter name=scale ! "
             VIDEOCONVERT " ! " 
             VIDEOSINK
-            " forkRaw2ShowNEnc. ! "
+        /*    " forkRaw2ShowNEnc. ! "
             " queue ! "
-            " video/x-raw, format=(string)GRAY8 ! "
             //" videoscale ! "
             //" video/x-raw, width=(int)3072, height=(int)3072 ! "
+        
             " nvvidconv ! "
-            " video/x-raw(memory:NVMM), format=(string)GRAY8, width=(int)4096, height=(int)3072 ! "
-            " nvvidconv ! "
-            " video/x-raw(memory:NVMM), format=(string)I420 ! "
+            //" video/x-raw(memory:NVMM), format=(string)GRAY8, width=(int)3072, height=(int)3072 ! "
             //" nvvidconv ! "
-            //" video/x-raw(memory:NVMM) format=(string)NV12 width=(int)1024, height=(int)1024 ! "
-            //" video/x-raw(memory:NVMM),  format=(string)NV12 ! "
-            //" video/x-raw(memory:NVMM),  format=(string)YUY2 ! " 
-            //" nvvidconv interpolation-method=1 ! "
-            //" video/x-raw(memory:NVMM), width=(int)1024, height=(int)1024, format=(string)NV12 ! "
-            //" 'video/x-raw(memory:NVMM), width=(int)1920, height=(int)1080, format=(string)NV12' ! "
+            //" video/x-raw(memory:NVMM), format=(string)I420 ! "
+        
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
             //" omxh264enc ! "
             " h264parse ! "
             " queue ! "
             " rtph264pay ! "
-            " udpsink host=192.168.0.169 port=5001 sync=false ",
+            " udpsink host=192.168.0.169 port=5001 sync=false "
+            */
+            ,
 	     NULL);
 
 //" video/x-raw(memory:NVMM), format=(string)NV12 ! "
@@ -199,7 +204,9 @@ void* videoDisplay(void*) {
   name=comp sink_0::xpos=0 sink_0::ypos=0 sink_0::width=1920 \
   sink_0::height=1080 
 
-
+//            " video/x-bayer, format=(string)bggr ! "
+ //           " bayer2rgb ! "
+   //         " queue ! "
 
 	/*
 	    Hardware-accelerated, but hardcoded pipeline:
@@ -225,14 +232,16 @@ void* videoDisplay(void*) {
 		goto exit;
 	bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
 	gst_bus_set_sync_handler(bus, (GstBusSyncHandler)bus_sync_handler,
-#if GST_CHECK_VERSION(1,0,0)
 			pipeline,
-#endif
 			NULL);
 	gst_object_unref(bus);
+	
 	appsrc = gst_bin_get_by_name(GST_BIN(pipeline), "streamViewer");
+	
+	
 	scale = gst_bin_get_by_name(GST_BIN(pipeline), "scale");
 	prevtime = getcurus();
+	
 	while(acquire) {
 	
 		if(xiGetImage(handle, 5000, &image) != XI_OK)
@@ -285,15 +294,41 @@ void* videoDisplay(void*) {
 			}
 			
 			GST_BUFFER_TIMESTAMP(buffer) = GST_CLOCK_TIME_NONE;
+			
+			
 			if(prev_width != image.width || 
-			   prev_height != image.height ||
+		        prev_height != image.height ||
 			    prev_format != image.frm) 
+			//if(false)
 			{
 				if(caps)
 					gst_caps_unref(caps);
-					
+				
+				/*
+				printf("DEBUG: BGRx from debayering;\n");
+				int wid_half= image.width/2;
+				int height_half= image.height/2;
+			    caps = gst_caps_new_simple(
+							"video/x-raw",
+							"format", G_TYPE_STRING, "BGRx",
+							"bpp", G_TYPE_INT, 32,
+							"depth", G_TYPE_INT, 24,
+							"endianness", G_TYPE_INT, G_BIG_ENDIAN,
+							"red_mask",   G_TYPE_INT, 0x0000ff00,
+							"green_mask", G_TYPE_INT, 0x00ff0000,
+							"blue_mask",  G_TYPE_INT, 0xff000000,
+							"framerate", GST_TYPE_FRACTION, 0, 1,
+							"width", G_TYPE_INT, wid_half,
+							"height", G_TYPE_INT, height_half,
+							NULL);
+				
+				// debayering: raw image is not relevant anymore.. NOT... mess
+				
+				*/
+				
 				if(image.frm == XI_RAW8)
 				{   
+				    /* old raw stuff w/o debayering
 				    printf("DEBUG: GRAY8\n");
 					caps = gst_caps_new_simple(
 							"video/x-raw",
@@ -304,6 +339,20 @@ void* videoDisplay(void*) {
 							"width", G_TYPE_INT, image.width,
 							"height", G_TYPE_INT, image.height,
 							NULL);
+					*/		
+					
+					printf("DEBUG: Appsrc has bay caps!;\n");
+					caps = gst_caps_new_simple(
+							"video/x-bayer",
+							"format", G_TYPE_STRING, "bggr",
+							"bpp", G_TYPE_INT, 8,
+							"depth", G_TYPE_INT, 8,
+							"framerate", GST_TYPE_FRACTION, 0, 1,
+							"width", G_TYPE_INT, image.width,
+							"height", G_TYPE_INT, image.height,
+							NULL);
+					
+				
 				}			
 				else if(image.frm == XI_RGB32)
 				{
@@ -324,9 +373,12 @@ void* videoDisplay(void*) {
 				}			
 				else
 				{
-				    printf("DEBUG: unkonw pixel format!\n");
+				    printf("DEBUG: unknown pixel format!\n");
 					break;
 				}	
+		
+				
+				
 				gst_element_set_state(pipeline, GST_STATE_PAUSED);
 				gst_app_src_set_caps(GST_APP_SRC(appsrc), caps);
 				gst_element_set_state(pipeline, GST_STATE_PLAYING);
@@ -349,16 +401,20 @@ void* videoDisplay(void*) {
 				size_caps = 
 				    gst_caps_new_simple(
 						"video/x-raw",
-						"width", G_TYPE_INT, width,
-						"height", G_TYPE_INT, height,
+						"width", G_TYPE_INT, width, 
+						"height", G_TYPE_INT, height, 
 						NULL);
+						
 				g_object_set(G_OBJECT(scale), "caps", size_caps, NULL);
 				gdk_threads_enter();
 				gtk_window_resize(GTK_WINDOW(videoWindow), width, height);
 				gdk_threads_leave();
 			}
 			
+			
+			
 			ret = gst_app_src_push_buffer(GST_APP_SRC(appsrc), buffer);
+			
 			if(ret != GST_FLOW_OK)
 				break;
 		}
