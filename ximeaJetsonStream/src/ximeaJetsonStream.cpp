@@ -126,7 +126,7 @@ void* videoDisplay(void*) {
 	    cam -> show on screen
 	        \-> hardware encode h264 -> write to disk
 	                                \-> stream per as RTP over UDP
-	*/
+
 	pipeline = gst_parse_launch(
 	    "appsrc is-live=TRUE name=streamViewer ! "
 	    " tee name=forkRaw2ShowNEnc ! "
@@ -138,7 +138,7 @@ void* videoDisplay(void*) {
             " forkRaw2ShowNEnc. ! "
             " queue ! "
             " nvvidconv ! "
-            " nvv4l2h264enc ! "
+            " nvv4l2h264enc maxperf-enable=true ! "
             " h264parse ! "
             " tee name=forkEnc2DiskNUDP ! "
             " queue ! "
@@ -146,8 +146,51 @@ void* videoDisplay(void*) {
             " forkEnc2DiskNUDP. ! "
             " queue ! "
             " rtph264pay ! "
-            " udpsink host=192.168.0.138 port=5001 sync=false ",
+            " udpsink host=192.168.0.169 port=5001 sync=false ",
 	     NULL);
+	*/
+
+	/*
+	    Hardware-accelerated, but hardcoded pipeline:
+
+	    cam -> show on screen
+	        \-> hardware encode h264 -> stream per as RTP over UDP
+	pipeline = gst_parse_launch(
+	    "appsrc is-live=TRUE name=streamViewer ! "
+	    " tee name=forkRaw2ShowNEnc ! "
+            " queue ! "
+            " videoscale add-borders=TRUE ! "
+            " capsfilter name=scale ! "
+            VIDEOCONVERT " ! " 
+            VIDEOSINK
+            " forkRaw2ShowNEnc. ! "
+            " queue ! "
+            " nvvidconv ! "
+            " nvv4l2h264enc maxperf-enable=true ! "
+            " h264parse ! "
+            " queue ! "
+            " rtph264pay ! "
+            " udpsink host=192.168.0.169 port=5001 sync=false ",
+	     NULL);
+	*/
+
+	/*
+	    Hardware-accelerated, but hardcoded pipeline:
+
+	    cam -> hardware encode h264 -> stream per as RTP over UDP
+	*/
+	pipeline = gst_parse_launch(
+	    "appsrc is-live=TRUE name=streamViewer ! "
+            " queue ! "
+            " nvvidconv ! "
+            " nvv4l2h264enc maxperf-enable=true ! "
+            " h264parse ! "
+            " queue ! "
+            " rtph264pay ! "
+            " udpsink host=192.168.0.169 port=5001 sync=false ",
+	     NULL);
+
+
 
 
 	if(!pipeline)
@@ -426,8 +469,14 @@ gboolean update_run(GtkToggleButton *run, ctrl_window *ctrl) {
 		xiGetParamInt(handle, XI_PRM_IMAGE_IS_COLOR, &isColor);
 		if(isColor)
 			xiSetParamInt(handle, XI_PRM_AUTO_WB, 1);
-		xiSetParamInt(handle, XI_PRM_EXPOSURE, 10000);
-		gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 10);
+
+		//xiSetParamInt(handle, XI_PRM_EXPOSURE, 10000);
+		//gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 10);
+
+		// slightly more than 60fps
+		xiSetParamInt(handle, XI_PRM_EXPOSURE, 15000);
+		gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 15);
+		
 		if(pthread_create(&videoThread, NULL, videoDisplay, NULL))
 			exit(1);
 	}
