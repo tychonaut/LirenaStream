@@ -1,0 +1,4 @@
+option( 'install_directory',
+        type : 'string', 
+        value : '/opt/LirenaStream/ximeaJetsonStream', 
+        description : 'Where to install the binaries, if desired')
