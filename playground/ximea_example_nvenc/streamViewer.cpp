@@ -146,7 +146,7 @@ void* videoDisplay(void*) {
             " forkEnc2DiskNUDP. ! "
             " queue ! "
             " rtph264pay ! "
-            " udpsink host=192.168.0.138 port=5001 sync=false ",
+            " udpsink host=192.168.0.169 port=5001 sync=false ",
 	     NULL);
 
 

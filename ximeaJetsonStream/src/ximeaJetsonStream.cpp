@@ -155,6 +155,7 @@ void* videoDisplay(void*) {
 
 	    cam -> show on screen
 	        \-> hardware encode h264 -> stream per as RTP over UDP
+   	*/
 	pipeline = gst_parse_launch(
 	    "appsrc is-live=TRUE name=streamViewer ! "
 	    " tee name=forkRaw2ShowNEnc ! "
@@ -165,33 +166,60 @@ void* videoDisplay(void*) {
             VIDEOSINK
             " forkRaw2ShowNEnc. ! "
             " queue ! "
+            " video/x-raw, format=(string)GRAY8 ! "
+            //" videoscale ! "
+            //" video/x-raw, width=(int)3072, height=(int)3072 ! "
             " nvvidconv ! "
-            " nvv4l2h264enc maxperf-enable=true ! "
+            " video/x-raw(memory:NVMM), format=(string)GRAY8, width=(int)4096, height=(int)3072 ! "
+            " nvvidconv ! "
+            " video/x-raw(memory:NVMM), format=(string)I420 ! "
+            //" nvvidconv ! "
+            //" video/x-raw(memory:NVMM) format=(string)NV12 width=(int)1024, height=(int)1024 ! "
+            //" video/x-raw(memory:NVMM),  format=(string)NV12 ! "
+            //" video/x-raw(memory:NVMM),  format=(string)YUY2 ! " 
+            //" nvvidconv interpolation-method=1 ! "
+            //" video/x-raw(memory:NVMM), width=(int)1024, height=(int)1024, format=(string)NV12 ! "
+            //" 'video/x-raw(memory:NVMM), width=(int)1920, height=(int)1080, format=(string)NV12' ! "
+            " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
+            //" omxh264enc ! "
             " h264parse ! "
             " queue ! "
             " rtph264pay ! "
             " udpsink host=192.168.0.169 port=5001 sync=false ",
 	     NULL);
-	*/
+
+//" video/x-raw(memory:NVMM), format=(string)NV12 ! "
+//" nvv4l2h264enc maxperf-enable=true ! "
+	/* For 4k encoding performance testing 
+   		(2k@120 Hz make problems, hence trying 4k@30,
+        which is our target resolution)
+    */
+    //BOOLEAN doQuadrupleImage_debug = TRUE;
+// nvcompositor \
+  name=comp sink_0::xpos=0 sink_0::ypos=0 sink_0::width=1920 \
+  sink_0::height=1080 
+
+
 
 	/*
 	    Hardware-accelerated, but hardcoded pipeline:
 
 	    cam -> hardware encode h264 -> stream per as RTP over UDP
-	*/
+
 	pipeline = gst_parse_launch(
 	    "appsrc is-live=TRUE name=streamViewer ! "
             " queue ! "
             " nvvidconv ! "
-            " nvv4l2h264enc maxperf-enable=true ! "
+            " video/x-raw(memory:NVMM), format=(string)NV12 ! "
+            " nvv4l2h264enc ! "
             " h264parse ! "
             " queue ! "
             " rtph264pay ! "
             " udpsink host=192.168.0.169 port=5001 sync=false ",
 	     NULL);
-
-
-
+	 */
+//" video/xraw(memory:NVMM), width=(int)4096, height=(int)4096, format=(string)GRAY8 ! "
+//" nvv4l2h264enc maxperf-enable=true ! "
 
 	if(!pipeline)
 		goto exit;
@@ -206,61 +234,83 @@ void* videoDisplay(void*) {
 	scale = gst_bin_get_by_name(GST_BIN(pipeline), "scale");
 	prevtime = getcurus();
 	while(acquire) {
+	
 		if(xiGetImage(handle, 5000, &image) != XI_OK)
 			break;
+			
 		if(render) {
-			unsigned long buffer_size = image.width*image.height*(image.frm == XI_RAW8 ? 1 : 4);
-			if(!image.padding_x) {
+			unsigned long buffer_size = 
+			    image.width*image.height*(image.frm == XI_RAW8 ? 1 : 4);
+			
+			if(!image.padding_x) 
+			{
 				buffer = gst_buffer_new();
-#if GST_CHECK_VERSION(1,0,0)
-				gst_buffer_insert_memory(buffer, -1, gst_memory_new_wrapped(GST_MEMORY_FLAG_READONLY, (guint8*)image.bp, buffer_size, 0, buffer_size, 0, 0));
-#else
-				gst_buffer_set_data(buffer, (guint8*)image.bp, buffer_size);
-#endif
-			} else {
-#if GST_CHECK_VERSION(1,0,0)
+				
+
+				gst_buffer_insert_memory(
+				    buffer, 
+				    -1, 
+				    gst_memory_new_wrapped(
+				        GST_MEMORY_FLAG_READONLY, 
+				        (guint8*)image.bp, 
+				        buffer_size, 
+				        0, 
+				        buffer_size, 
+				        0, 
+				        0)
+				);
+
+
+			} 
+			else 
+			{
+                printf("Warning: image is padded, mem copy is row-wise!\n");
 				buffer = gst_buffer_new_allocate(0, buffer_size, 0);
 				if(!buffer)
 					break;
-#else
-				buffer = gst_buffer_new_and_alloc(buffer_size);
-#endif
+
 				for(int i = 0; i < image.height; i++)
-#if GST_CHECK_VERSION(1,0,0)
-					gst_buffer_fill(buffer,
-#else
-					memcpy(GST_BUFFER_DATA(buffer)+
-#endif
-							i*image.width*(image.frm == XI_RAW8 ? 1 : 4),
-							(guint8*)image.bp+i*(image.width*(image.frm == XI_RAW8 ? 1 : 4)+image.padding_x),
-							image.width*(image.frm == XI_RAW8 ? 1 : 4));
+				{
+					gst_buffer_fill(
+					        buffer,
+							i * image.width * (image.frm == XI_RAW8 ? 1 : 4),
+							(guint8*)image.bp
+							+
+							i*(image.width*(image.frm == XI_RAW8 ? 1 : 4)
+							+
+							image.padding_x),
+							image.width*(image.frm == XI_RAW8 ? 1 : 4)
+							);
+				}
 			}
+			
 			GST_BUFFER_TIMESTAMP(buffer) = GST_CLOCK_TIME_NONE;
-			if(prev_width != image.width || prev_height != image.height || prev_format != image.frm) {
+			if(prev_width != image.width || 
+			   prev_height != image.height ||
+			    prev_format != image.frm) 
+			{
 				if(caps)
 					gst_caps_unref(caps);
+					
 				if(image.frm == XI_RAW8)
+				{   
+				    printf("DEBUG: GRAY8\n");
 					caps = gst_caps_new_simple(
-#if GST_CHECK_VERSION(1,0,0)
 							"video/x-raw",
 							"format", G_TYPE_STRING, "GRAY8",
-#else
-							"video/x-raw-gray",
-#endif
 							"bpp", G_TYPE_INT, 8,
 							"depth", G_TYPE_INT, 8,
 							"framerate", GST_TYPE_FRACTION, 0, 1,
 							"width", G_TYPE_INT, image.width,
 							"height", G_TYPE_INT, image.height,
 							NULL);
+				}			
 				else if(image.frm == XI_RGB32)
+				{
+				    printf("DEBUG: RGB32\n");
 					caps = gst_caps_new_simple(
-#if GST_CHECK_VERSION(1,0,0)
 							"video/x-raw",
 							"format", G_TYPE_STRING, "BGRx",
-#else
-							"video/x-raw-rgb",
-#endif
 							"bpp", G_TYPE_INT, 32,
 							"depth", G_TYPE_INT, 24,
 							"endianness", G_TYPE_INT, G_BIG_ENDIAN,
@@ -271,8 +321,12 @@ void* videoDisplay(void*) {
 							"width", G_TYPE_INT, image.width,
 							"height", G_TYPE_INT, image.height,
 							NULL);
+				}			
 				else
+				{
+				    printf("DEBUG: unkonw pixel format!\n");
 					break;
+				}	
 				gst_element_set_state(pipeline, GST_STATE_PAUSED);
 				gst_app_src_set_caps(GST_APP_SRC(appsrc), caps);
 				gst_element_set_state(pipeline, GST_STATE_PLAYING);
@@ -281,18 +335,20 @@ void* videoDisplay(void*) {
 				prev_format = image.frm;
 				int width = image.width;
 				int height = image.height;
+				
 				while(width > max_width || height > max_height) {
 					width /= 2;
 					height /=2;
 				}
+				
 				if(size_caps)
+				{
 					gst_caps_unref(size_caps);
-				size_caps = gst_caps_new_simple(
-#if GST_CHECK_VERSION(1,0,0)
+				}
+				
+				size_caps = 
+				    gst_caps_new_simple(
 						"video/x-raw",
-#else
-						image.frm == XI_RAW8 ? "video/x-raw-gray" : "video/x-raw-rgb",
-#endif
 						"width", G_TYPE_INT, width,
 						"height", G_TYPE_INT, height,
 						NULL);
@@ -301,29 +357,39 @@ void* videoDisplay(void*) {
 				gtk_window_resize(GTK_WINDOW(videoWindow), width, height);
 				gdk_threads_leave();
 			}
+			
 			ret = gst_app_src_push_buffer(GST_APP_SRC(appsrc), buffer);
 			if(ret != GST_FLOW_OK)
 				break;
 		}
+		
 		frames++;
 		if(image.nframe > lastframe)
 			lostframes += image.nframe - (lastframe + 1);
 		lastframe = image.nframe;
 		curtime = getcurus();
 		if(curtime - prevtime > 1000000) {
-			snprintf(title, 256, "Acquisition [ captured: %lu, skipped: %lu, fps: %.2f ]", frames, lostframes, 1000000.0 * (frames - prevframes) / (curtime - prevtime));
+			snprintf(
+			    title, 
+			    256, 
+			    "Acquisition [ captured: %lu, skipped: %lu, fps: %.2f ]", 
+			    frames, 
+			    lostframes, 
+			    1000000.0 * (frames - prevframes) / (curtime - prevtime)
+			);
 			gtk_window_set_title(GTK_WINDOW(videoWindow), title);
 			prevframes = frames;
 			prevtime = curtime;
 		}
 	}
+	
 	if(caps)
 		gst_caps_unref(caps);
 	if(size_caps)
 		gst_caps_unref(size_caps);
 	gst_app_src_end_of_stream(GST_APP_SRC(appsrc));
 	gst_element_set_state(pipeline, GST_STATE_NULL);
-	gst_object_unref(GST_OBJECT(pipeline));
+	gst_object_unref(GST_OBJECT(pipeline));	
 exit:
 	gdk_threads_enter();
 	gtk_widget_destroy(videoWindow);
@@ -339,7 +405,30 @@ exit:
 }
 
 struct ctrl_window {
-    GtkWidget *window, *boxmain, *boxgpi, *boxx, *boxy, *gpi1, *gpi2, *gpi3, *gpi4, *labelexp, *exp, *labelgain, *gain, *labelx0, *x0, *labely0, *y0, *labelcx, *cx, *labelcy, *cy, *raw, *show, *run;
+    GtkWidget *window, 
+        *boxmain, 
+        *boxgpi, 
+        *boxx, 
+        *boxy, 
+        *gpi1, 
+        *gpi2, 
+        *gpi3, 
+        *gpi4, 
+        *labelexp, 
+        *exp, 
+        *labelgain, 
+        *gain, 
+        *labelx0, 
+        *x0, 
+        *labely0, 
+        *y0, 
+        *labelcx, 
+        *cx, 
+        *labelcy, 
+        *cy, 
+        *raw, 
+        *show, 
+        *run;
 };
 
 gboolean time_handler(ctrl_window *ctrl) {
@@ -474,8 +563,12 @@ gboolean update_run(GtkToggleButton *run, ctrl_window *ctrl) {
 		//gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 10);
 
 		// slightly more than 60fps
-		xiSetParamInt(handle, XI_PRM_EXPOSURE, 15000);
-		gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 15);
+		//xiSetParamInt(handle, XI_PRM_EXPOSURE, 15000);
+		//gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 15);
+		
+		// slightly more than 30fps
+		xiSetParamInt(handle, XI_PRM_EXPOSURE, 30000);
+		gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 30);
 		
 		if(pthread_create(&videoThread, NULL, videoDisplay, NULL))
 			exit(1);
