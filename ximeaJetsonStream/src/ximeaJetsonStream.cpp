@@ -417,6 +417,7 @@ void* videoDisplay(void*) {
 				break;
 		}
 		
+		
 		frames++;
 		if(image.nframe > lastframe)
 			lostframes += image.nframe - (lastframe + 1);
@@ -432,6 +433,7 @@ void* videoDisplay(void*) {
 			    1000000.0 * (frames - prevframes) / (curtime - prevtime)
 			);
 			gtk_window_set_title(GTK_WINDOW(videoWindow), title);
+			
 			prevframes = frames;
 			prevtime = curtime;
 		}

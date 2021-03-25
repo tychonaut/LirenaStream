@@ -5,8 +5,14 @@
 #include <opencv2/cudaarithm.hpp>
 #include <cuda_runtime.h>
 
+#include <sys/time.h>
+
+
 // Define the number of images acquired, processed and shown in this example
-#define NUMBER_OF_IMAGES 1000
+#define NUMBER_OF_IMAGES 10000
+//set to 0 to get rid of overhead of setting up the GUI/showing the image
+#define DO_SHOW_IMAGE 1
+
 
 // Define parameters for a static white balance
 #define WB_BLUE 2
@@ -15,6 +21,16 @@
 
 using namespace cv;
 using namespace std;
+
+//microseconds
+inline unsigned long getcurus() {
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	return now.tv_sec * 1000000 + now.tv_usec;
+}
+
+
+
 
 int main(){
   // Initialize XI_IMG structure
@@ -87,18 +103,21 @@ int main(){
     if (stat != XI_OK)
       throw "Setting bit depth failed";
     
+    
     // Exposure 7 ms --> more than 120 fps (if no other bottleneck is there)
     stat = xiSetParamInt(xiH, XI_PRM_EXPOSURE, 7000);
     if (stat != XI_OK)
       throw "Setting exposure failed";
       
-      
+    // gain
     float mingain, maxgain;	
 	xiGetParamFloat(xiH, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
 	xiGetParamFloat(xiH, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
 	float mygain = mingain +  (maxgain - mingain) * 1.0f;
 	xiSetParamFloat(xiH, XI_PRM_GAIN, mygain);     
       
+    // NO auto whitebalance!
+    xiSetParamInt(xiH, XI_PRM_AUTO_WB, 0);
       
 
     // Get width of image
@@ -118,12 +137,15 @@ int main(){
     if (stat != XI_OK)
       throw "Starting image acquisition failed";
 
-    // Create a GUI window with OpenGL support
-    namedWindow("XIMEA camera", WINDOW_OPENGL);
-    // OpenGL window makes problems!
-    //namedWindow("XIMEA camera");
-    resizeWindow("XIMEA camera", width/3, height/3);
-    resizeWindow("XIMEA camera", width, height);
+    if(DO_SHOW_IMAGE)
+    {
+        // Create a GUI window with OpenGL support
+        namedWindow("XIMEA camera", WINDOW_OPENGL);
+        // OpenGL window makes problems!
+        //namedWindow("XIMEA camera");
+        resizeWindow("XIMEA camera", width/2, height/2);
+        //resizeWindow("XIMEA camera", 1600 , 1000);
+    }
  
     // Define pointer used for data on GPU
     void *imageGpu;
@@ -132,14 +154,26 @@ int main(){
     cuda::GpuMat gpu_mat_color(height, width, CV_8UC3);
   
   
+    int const WINDOW_TITLE_LENGTH = 512;
+    char title_string[WINDOW_TITLE_LENGTH];
+      
+    unsigned long current_captured_frame_count = 0;
+    unsigned long prev_captured_frame_count = 0;
+    unsigned long last_camera_frame_count = 0;
+    unsigned long lost_frames_count = 0;
+    unsigned long current_time = 0;
+    unsigned long prev_time = 0;
+  
+    prev_time = getcurus();
+  
     // Acquire a number of images, process and render them
     for (int i = 0; i < NUMBER_OF_IMAGES; i++){
+ 
+    
       // Get host-pointer to image data
       stat = xiGetImage(xiH, 5000, &image);
       if (stat != XI_OK)
         throw "Getting image from camera failed";
-        
-      int sizes[2] = {height, width};
       
       /*
       // pure CPU test: for debugging if cuda makes problems: 
@@ -166,14 +200,47 @@ int main(){
       // Demosaic raw bayer image to color image
       cuda::demosaicing(gpu_mat_raw, gpu_mat_color, OCVbayer);
       // Apply static white balance by multiplying the channels
-      cuda::multiply(gpu_mat_color, cv::Scalar(WB_BLUE, WB_GREEN, WB_RED), gpu_mat_color);
+      //cuda::multiply(gpu_mat_color, cv::Scalar(WB_BLUE, WB_GREEN, WB_RED), gpu_mat_color);
 
-      
-      // Render image to the screen (using OpenGL) 
-      imshow("XIMEA camera", gpu_mat_color);  
-      //imshow("XIMEA camera", gpu_mat_raw);      
-      //test without OpenGL:
-      //imshow("XIMEA camera non-GL", debugCPURawMat);      
+
+      // FPS calcs: ------------------------------------------------------------      
+	  current_captured_frame_count++;
+	  if(image.nframe > last_camera_frame_count)
+	  {
+			lost_frames_count += image.nframe - (last_camera_frame_count + 1);
+	  } 
+	  last_camera_frame_count = image.nframe;
+      current_time = getcurus();
+      //update around each second:
+	  if(current_time - prev_time > 1000000) 
+	  {
+			snprintf(
+			    title_string, 
+			    WINDOW_TITLE_LENGTH, 
+			    "Acquisition [ captured: %lu, skipped: %lu, fps: %.2f ]\n", 
+			    current_captured_frame_count, 
+			    lost_frames_count, 
+			    1000000.0 * (current_captured_frame_count - prev_captured_frame_count) 
+			     / (current_time - prev_time)
+			);
+			printf("%s",title_string);
+			
+			prev_captured_frame_count = current_captured_frame_count;
+			prev_time = current_time;  
+		}
+
+
+
+
+      if(DO_SHOW_IMAGE)
+      {
+          // Render image to the screen (using OpenGL) 
+          imshow("XIMEA camera", gpu_mat_color); 
+           
+          //imshow("XIMEA camera", gpu_mat_raw);      
+          //test without OpenGL:
+          //imshow("XIMEA camera non-GL", debugCPURawMat);      
+      }
       
       
       waitKey(1);
