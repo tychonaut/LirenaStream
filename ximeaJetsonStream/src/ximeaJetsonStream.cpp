@@ -177,11 +177,19 @@ void* videoDisplay(void*) {
 	int max_width, max_height;
 	int prev_width = -1;
 	int prev_height = -1;
+	
 	unsigned long frames = 0;
 	unsigned long prevframes = 0;
 	unsigned long lostframes = 0;
+	
 	unsigned long curtime, prevtime;
+    unsigned long firsttime = getcurus();
+    unsigned long gstreamerPreviousTime;
+    
+	
+	
 	long lastframe = -1;
+	
 	gchar title[256];
 	XI_IMG_FORMAT prev_format = XI_RAW8;
 	XI_IMG image;
@@ -272,8 +280,9 @@ void* videoDisplay(void*) {
             " fork_enc_to_disk_and_UDP. ! "
             " queue ! "
             " mpegtsmux name=mp2ts_muxer ! "
-            //" tsparse set-timestamps=true ! " //TODO what does set-timestamps=true do?
-            " filesink location=%s -e "
+            " tsparse ! " //set-timestamps=true ! " // pcr-pid=-1 TODO what does set-timestamps=true do?
+            " queue max-size-time=30000000000 max-size-bytes=0 max-size-buffers=0 ! "
+            " filesink location=%s "
             ""
             " fork_enc_to_disk_and_UDP. ! ",
             globalAppArgs.output_file);
@@ -314,7 +323,7 @@ void* videoDisplay(void*) {
             " queue ! "
             " nvvidconv ! "
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
-            " h264parse disable-passthrough=true ! "
+            " h264parse !" // disable-passthrough=true ! "
             " %s " // optional fork to inject dump-to-disk
             " queue ! "
             " rtph264pay ! "
@@ -345,7 +354,7 @@ void* videoDisplay(void*) {
             " queue ! "
             " nvvidconv ! "
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
-            " h264parse disable-passthrough=true ! "
+            " h264parse ! " // disable-passthrough=true ! "
             " %s " // optional fork to inject dump-to-disk
             " queue ! "
             " rtph264pay ! "
@@ -417,7 +426,12 @@ void* videoDisplay(void*) {
 	
 	
 	scale = gst_bin_get_by_name(GST_BIN(pipeline), "scale");
+	
+	firsttime = getcurus();
 	prevtime = getcurus();
+	gstreamerPreviousTime = 0; // IIRC, when going to playing state, all times are zero
+	
+	
 	
 	while(acquire) {
 	
@@ -473,26 +487,52 @@ void* videoDisplay(void*) {
 			
 			//gst_pipeline_set_latency(GST_PIPELINE(pipeline), 600 * GST_MSECOND);
 			
-			//GstClock * pipelineClock =
-            //  gst_pipeline_get_pipeline_clock (GST_PIPELINE(pipeline));
-            //GstClockTime currentTime =
-            //    gst_clock_get_time (pipelineClock);
+			GstClock * pipelineClock =
+              gst_pipeline_get_pipeline_clock (GST_PIPELINE(pipeline));
+            GstClockTime gstreamerCurrentTime =
+                gst_clock_get_time (pipelineClock);
+            gst_object_unref(pipelineClock);
+            GstClockTime gstreamerStartTime = GST_ELEMENT(pipeline)->start_time;
+            
+            GstClockTime gstreamerCurrentTimestamp =  gstreamerCurrentTime - gstreamerStartTime;          
+            /*
+             
+            GstClockTime gstreamerCurrentFrameDuration = gstreamerCurrentTimestamp - gstreamerPreviousTime;
+
+            //GST_BUFFER_TIMESTAMP(buffer) = gstreamerCurrentTimestamp; //  - 1* GST_MSECOND;
+            //GST_BUFFER_DURATION (buffer) = gstreamerCurrentFrameDuration;
+            GST_BUFFER_PTS(buffer) = gstreamerCurrentTimestamp; //  + 30 * GST_MSECOND;
+            //buffer->duration = gstreamerCurrentFrameDuration;
+            //buffer->offset = frames;
+            GST_BUFFER_OFFSET(buffer) = frames;
+            
+            gstreamerPreviousTime = gstreamerCurrentTimestamp;
+            
 			
-			//GST_BUFFER_TIMESTAMP(buffer) = currentTime - 600 * GST_MSECOND; //GST_CLOCK_TIME_NONE;
-            //GST_BUFFER_TIMESTAMP(buffer) = GST_CLOCK_TIME_NONE;
+
             
-            
+            // works, but unstable due to systematic errors;
 			unsigned long target_FPS = (unsigned long) (1000/globalAppArgs.exposure_ms);
-			 /* Set its timestamp and duration */
-            GST_BUFFER_TIMESTAMP (buffer) = gst_util_uint64_scale (frames, GST_SECOND, target_FPS);
-            GST_BUFFER_DURATION (buffer) = gst_util_uint64_scale (globalAppArgs.exposure_ms, GST_MSECOND, target_FPS);
-            
-            
+			// Set its timestamp and duration
+            //GST_BUFFER_TIMESTAMP (buffer) = gst_util_uint64_scale (frames, GST_SECOND, target_FPS);
+            //GST_BUFFER_DURATION (buffer) = gst_util_uint64_scale (globalAppArgs.exposure_ms, GST_MSECOND, target_FPS);
+            //GST_BUFFER_DURATION (buffer) = GST_CLOCK_TIME_NONE;
+            */
+            //GST_BUFFER_DURATION (buffer) = globalAppArgs.exposure_ms * GST_MSECOND;
+			
+            GST_BUFFER_TIMESTAMP(buffer) = GST_CLOCK_TIME_NONE;
+			//works, but is not precise
+			GST_BUFFER_PTS(buffer) = (guint64) ( (guint64) frames * (guint64) globalAppArgs.exposure_ms * (guint64) GST_MSECOND);
+			// NOT works... maybe the pieline clokc is bad because the source is life and app source...
+			//GST_BUFFER_PTS(buffer) = gstreamerCurrentTimestamp;
+			 
+			curtime = getcurus();
+			GST_BUFFER_PTS(buffer) = (guint64) (curtime - firsttime) * GST_USECOND ;
+			
 			
 			if(prev_width != image.width || 
 		        prev_height != image.height ||
 			    prev_format != image.frm) 
-			//if(false)
 			{
 				if(caps)
 					gst_caps_unref(caps);
