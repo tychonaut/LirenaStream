@@ -39,7 +39,7 @@ static char args_doc[] = "IP Port";
 /* The options we understand. */
 static struct argp_option options[] = {
   //{"verbose",  'v', 0,      0,  "Produce verbose output" },
-  {"display",  'd', 0,      0,  "display video locally, (not just stream per UDP)" },
+  {"localdisplay",  'l', 0,      0,  "display video locally, (not just stream per UDP)" },
   {"output",   'o', "FILE", 0, "Dump encoded stream to disk" }, //OPTION_ARG_OPTIONAL
   {"exposure", 'e', "time_ms", 0, "Exposure time in milliseconds" },
   { 0 }
@@ -48,7 +48,7 @@ static struct argp_option options[] = {
 /* Used by main to communicate with parse_opt. */
 struct ApplicationArguments
 {
-  bool doDisplay;
+  bool doLocalDisplay;
   //int silent, verbose;
   char const *output_file;
 
@@ -73,8 +73,8 @@ parse_opt (int key, char *arg, struct argp_state *state)
 
   switch (key)
     {
-    case 'd':
-      myArgs->doDisplay = true;
+    case 'l':
+      myArgs->doLocalDisplay = true;
       break;
     //case 'v':
     //  arguments->verbose = 1;
@@ -85,8 +85,6 @@ parse_opt (int key, char *arg, struct argp_state *state)
     case 'e':
       myArgs->exposure_ms = atoi(arg);
       break;
-
-
 
     case ARGP_KEY_ARG:
       if (state->arg_num >= 2)
@@ -246,45 +244,95 @@ void* videoDisplay(void*) {
 	*/
 
 
-	/*
-	    Hardware-accelerated, but hardcoded pipeline:
 
-	    cam -> show on screen
-	        \-> hardware encode h264 -> stream per as RTP over UDP
-   	*/
-	pipeline = gst_parse_launch(
-	    " appsrc is-live=TRUE name=streamViewer ! " 
-	                            
-	    "   video/x-bayer ! "
-        " bayer2rgb ! "
-        "   video/x-raw, format=(string)BGRx ! "
-        " videoconvert ! "
-        
-	    " tee name=forkRaw2ShowNEnc ! "
-	    
+   	// ten thousand chars are hopefully sufficient...
+   	#define MAX_GSTREAMER_PIPELINE_STRING_LENGTH 10000
+    gchar gstreamerPipelineString [MAX_GSTREAMER_PIPELINE_STRING_LENGTH];
+    
+    if(globalAppArgs.doLocalDisplay)
+    {
+	    /*
+	        cam -> show on screen
+	            \-> hardware encode h264 -> stream per as RTP over UDP
+       	*/
+       	 	
+       	g_snprintf (gstreamerPipelineString,
+            (gulong) MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
+            " appsrc is-live=TRUE name=streamViewer ! "                         
+	        "   video/x-bayer ! "
+            " bayer2rgb ! "
+            "   video/x-raw, format=(string)BGRx ! "
+            " videoconvert ! "
+	        " tee name=forkRaw2ShowNEnc "
+            ""
+            " forkRaw2ShowNEnc. ! "
             " queue ! "
             " videoscale add-borders=TRUE ! "
             " capsfilter name=scale ! "
             VIDEOCONVERT " ! " 
             VIDEOSINK
-            
+            ""
             " forkRaw2ShowNEnc. ! "
             " queue ! "
-
             " nvvidconv ! "
-            //" video/x-raw(memory:NVMM), format=(string)GRAY8, width=(int)3072, height=(int)3072 ! "
-            //" nvvidconv ! "
-            //" video/x-raw(memory:NVMM), format=(string)I420 ! "
-        
-            " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
-            
+            " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
             " h264parse ! "
             " queue ! "
             " rtph264pay ! "
-            " udpsink host=192.168.0.169 port=5001 sync=false "
-            
+            " udpsink "
+            "   host=%s"
+            "   port=%s"
+            "   sync=false "
             ,
-	     NULL);
+            globalAppArgs.IP,
+            globalAppArgs.port 
+            );
+       	
+       	GST_DEBUG("HERE MY PIPELINE: %s",gstreamerPipelineString);
+       	//exit(1);
+       	
+	    pipeline = gst_parse_launch(
+  	         gstreamerPipelineString,
+	         NULL);
+	}
+	else
+	{
+	    // no local displaying, only streaming
+	   	    
+	   	/*
+	        cam -> hardware encode h264 -> stream per as RTP over UDP
+       	*/	
+       	g_snprintf (gstreamerPipelineString,
+            (gulong) MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
+            " appsrc is-live=TRUE name=streamViewer ! "                         
+	        "   video/x-bayer ! "
+            " bayer2rgb ! "
+            "   video/x-raw, format=(string)BGRx ! "
+            " videoconvert ! "
+            " queue ! "
+            " nvvidconv ! "
+            " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
+            " h264parse ! "
+            " queue ! "
+            " rtph264pay ! "
+            " udpsink "
+            "   host=%s"
+            "   port=%s"
+            "   sync=false "
+            ,
+            globalAppArgs.IP,
+            globalAppArgs.port 
+            );	
+	}
+	     
+   	GST_DEBUG("HERE MY PIPELINE: %s",gstreamerPipelineString);
+       	
+    pipeline = gst_parse_launch(
+      	         gstreamerPipelineString,
+    	         NULL);   
+	     
+	     
+	     
 
                 //" video/x-raw(memory:NVMM), format=(string)NV12 ! "
                 //" nvv4l2h264enc maxperf-enable=true ! "
@@ -751,7 +799,7 @@ int main(int argc, char **argv)
     //{ parse args ------------------------------------------------------------
     
     /* Default values. */
-    globalAppArgs.doDisplay = false;
+    globalAppArgs.doLocalDisplay = false;
     globalAppArgs.output_file = nullptr;
     globalAppArgs.exposure_ms = 30;
     globalAppArgs.IP = "192.168.0.169";
@@ -768,10 +816,12 @@ int main(int argc, char **argv)
             globalAppArgs.port,
             globalAppArgs.exposure_ms,
             globalAppArgs.output_file ? globalAppArgs.output_file : "-none-",
-            globalAppArgs.doDisplay ? "yes" : "no");
+            globalAppArgs.doLocalDisplay ? "yes" : "no");
 
     //exit(0);
     //} end parse args --------------------------------------------------------
+    
+    
 
 	ctrl_window ctrl;
 #ifdef GDK_WINDOWING_X11
