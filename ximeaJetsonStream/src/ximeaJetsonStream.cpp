@@ -81,6 +81,7 @@ parse_opt (int key, char *arg, struct argp_state *state)
     //  break;
     case 'o':
       myArgs->output_file = arg;
+      printf("%s", "Warning: local dump to disk currently not supported.\n");
       break;
     case 'e':
       myArgs->exposure_ms = atoi(arg);
@@ -233,10 +234,13 @@ void* videoDisplay(void*) {
             " nvvidconv ! "
             " nvv4l2h264enc maxperf-enable=true ! "
             " h264parse ! "
-            " tee name=forkEnc2DiskNUDP ! "
+            " tee name=forkEnc2Disk_and_UDP "
+            ""
+            " forkEnc2Disk_and_UDP. ! "
             " queue ! "
-            " filesink location=myJetsonTx2NvEncedMp2Dump.mp4 -e "
-            " forkEnc2DiskNUDP. ! "
+            " filesink location=%s -e "
+            ""
+            " forkEnc2Disk_and_UDP. ! "
             " queue ! "
             " rtph264pay ! "
             " udpsink host=192.168.0.169 port=5001 sync=false ",
@@ -247,7 +251,41 @@ void* videoDisplay(void*) {
 
    	// ten thousand chars are hopefully sufficient...
    	#define MAX_GSTREAMER_PIPELINE_STRING_LENGTH 10000
+   	#define MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH 1000
+   	
     gchar gstreamerPipelineString [MAX_GSTREAMER_PIPELINE_STRING_LENGTH];
+    gchar gstreamerForkString_enc_to_disk_and_UDP[
+      MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
+    
+    if(globalAppArgs.output_file)
+    {
+        /*
+          Inject dump-to-disk:
+          [encoded stream incoming] -> write to disk
+	                                \-> [to stream as RTP over UDP]
+        */
+        g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
+            (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+            // TODO maybe add " h264parse disable-passthrough=true ! "
+            " tee name=fork_enc_to_disk_and_UDP " 
+            ""
+            " fork_enc_to_disk_and_UDP. ! "
+            " queue ! "
+            " mpegtsmux name=mp2ts_muxer ! "
+            //" tsparse set-timestamps=true ! " //TODO what does set-timestamps=true do?
+            " filesink location=%s -e "
+            ""
+            " fork_enc_to_disk_and_UDP. ! ",
+            globalAppArgs.output_file);
+    }
+    else
+    {
+        //empty string:
+        g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
+                   (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+                   "%s","");
+    }
+    
     
     if(globalAppArgs.doLocalDisplay)
     {
@@ -256,7 +294,7 @@ void* videoDisplay(void*) {
 	            \-> hardware encode h264 -> stream per as RTP over UDP
        	*/
        	 	
-       	g_snprintf (gstreamerPipelineString,
+       	g_snprintf(gstreamerPipelineString,
             (gulong) MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
             " appsrc is-live=TRUE name=streamViewer ! "                         
 	        "   video/x-bayer ! "
@@ -276,7 +314,8 @@ void* videoDisplay(void*) {
             " queue ! "
             " nvvidconv ! "
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
-            " h264parse ! "
+            " h264parse disable-passthrough=true ! "
+            " %s " // optional fork to inject dump-to-disk
             " queue ! "
             " rtph264pay ! "
             " udpsink "
@@ -284,16 +323,10 @@ void* videoDisplay(void*) {
             "   port=%s"
             "   sync=false "
             ,
+            gstreamerForkString_enc_to_disk_and_UDP,
             globalAppArgs.IP,
             globalAppArgs.port 
             );
-       	
-       	GST_DEBUG("HERE MY PIPELINE: %s",gstreamerPipelineString);
-       	//exit(1);
-       	
-	    pipeline = gst_parse_launch(
-  	         gstreamerPipelineString,
-	         NULL);
 	}
 	else
 	{
@@ -312,7 +345,8 @@ void* videoDisplay(void*) {
             " queue ! "
             " nvvidconv ! "
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
-            " h264parse ! "
+            " h264parse disable-passthrough=true ! "
+            " %s " // optional fork to inject dump-to-disk
             " queue ! "
             " rtph264pay ! "
             " udpsink "
@@ -320,6 +354,7 @@ void* videoDisplay(void*) {
             "   port=%s"
             "   sync=false "
             ,
+            gstreamerForkString_enc_to_disk_and_UDP,
             globalAppArgs.IP,
             globalAppArgs.port 
             );	
@@ -435,8 +470,24 @@ void* videoDisplay(void*) {
 				}
 			}
 			
-			GST_BUFFER_TIMESTAMP(buffer) = GST_CLOCK_TIME_NONE;
 			
+			//gst_pipeline_set_latency(GST_PIPELINE(pipeline), 600 * GST_MSECOND);
+			
+			//GstClock * pipelineClock =
+            //  gst_pipeline_get_pipeline_clock (GST_PIPELINE(pipeline));
+            //GstClockTime currentTime =
+            //    gst_clock_get_time (pipelineClock);
+			
+			//GST_BUFFER_TIMESTAMP(buffer) = currentTime - 600 * GST_MSECOND; //GST_CLOCK_TIME_NONE;
+            //GST_BUFFER_TIMESTAMP(buffer) = GST_CLOCK_TIME_NONE;
+            
+            
+			unsigned long target_FPS = (unsigned long) (1000/globalAppArgs.exposure_ms);
+			 /* Set its timestamp and duration */
+            GST_BUFFER_TIMESTAMP (buffer) = gst_util_uint64_scale (frames, GST_SECOND, target_FPS);
+            GST_BUFFER_DURATION (buffer) = gst_util_uint64_scale (globalAppArgs.exposure_ms, GST_MSECOND, target_FPS);
+            
+            
 			
 			if(prev_width != image.width || 
 		        prev_height != image.height ||
