@@ -2,20 +2,125 @@
 #include <pthread.h>
 #include <string.h>
 #include <gtk/gtk.h>
+
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #include <X11/Xlib.h>
 #endif
+
 #include <gst/app/gstappsrc.h>
-#if GST_CHECK_VERSION(1,0,0)
+
 #include <gst/video/videooverlay.h>
 #define VIDEOCONVERT "videoconvert"
 
-#else
-#include <gst/interfaces/xoverlay.h>
-#define VIDEOCONVERT "ffmpegcolorspace"
-#endif
+
 #include <m3api/xiApi.h>
+
+#include <argp.h>
+
+
+
+//{ parsing CLI options --------------------------------------------------------
+#include <stdlib.h>
+#include <argp.h>
+
+const char *argp_program_version =
+  "ximeaJetsonStream 0.2.0";
+const char *argp_program_bug_address =
+  "<mschlueter@geomar.de>";
+
+/* Program documentation. */
+static char doc[] =
+  "Capture and stream video from Ximea camera on Jetson using GStreamer";
+
+/* A description of the arguments we accept. */
+static char args_doc[] = "IP Port";
+
+/* The options we understand. */
+static struct argp_option options[] = {
+  //{"verbose",  'v', 0,      0,  "Produce verbose output" },
+  {"display",  'd', 0,      0,  "display video locally, (not just stream per UDP)" },
+  {"output",   'o', "FILE", 0, "Dump encoded stream to disk" }, //OPTION_ARG_OPTIONAL
+  {"exposure", 'e', "time_ms", 0, "Exposure time in milliseconds" },
+  { 0 }
+};
+
+/* Used by main to communicate with parse_opt. */
+struct ApplicationArguments
+{
+  bool doDisplay;
+  //int silent, verbose;
+  char const *output_file;
+
+  char const *IP;
+  char const *port;
+  
+  int exposure_ms;
+};
+
+ApplicationArguments globalAppArgs;
+
+
+
+/* Parse a single option. */
+static error_t
+parse_opt (int key, char *arg, struct argp_state *state)
+{
+  /* Get the input argument from argp_parse, which we
+     know is a pointer to our arguments structure. */
+  struct ApplicationArguments *myArgs = 
+    (struct ApplicationArguments *) state->input;
+
+  switch (key)
+    {
+    case 'd':
+      myArgs->doDisplay = true;
+      break;
+    //case 'v':
+    //  arguments->verbose = 1;
+    //  break;
+    case 'o':
+      myArgs->output_file = arg;
+      break;
+    case 'e':
+      myArgs->exposure_ms = atoi(arg);
+      break;
+
+
+
+    case ARGP_KEY_ARG:
+      if (state->arg_num >= 2)
+      {
+        /* Too many arguments. */
+        argp_usage (state);
+      }
+      if(state->arg_num == 0)
+      {
+        myArgs->IP = arg;
+      }
+      else
+      {
+        myArgs->port = arg;
+      }
+      break;
+
+    case ARGP_KEY_END:
+      if (state->arg_num < 2)
+        /* Not enough arguments. */
+        argp_usage (state);
+      break;
+
+    default:
+      return ARGP_ERR_UNKNOWN;
+    }
+  return 0;
+}
+
+/* Our argp parser. */
+static struct argp argp = { options, parse_opt, args_doc, doc };
+//} ----------------------------------------------------------------------------
+
+
 
 BOOLEAN acquire, quitting, render = TRUE;
 int maxcx, maxcy, roix0, roiy0, roicx, roicy;
@@ -24,19 +129,9 @@ HANDLE handle = INVALID_HANDLE_VALUE;
 guintptr window_handle;
 
 GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, gpointer) {
-#if GST_CHECK_VERSION(1,0,0)
 	if(!gst_is_video_overlay_prepare_window_handle_message(message))
-#else
-	if(GST_MESSAGE_TYPE(message) != GST_MESSAGE_ELEMENT || !gst_structure_has_name(message->structure, "prepare-xwindow-id"))
-#endif
 		return GST_BUS_PASS;
-#if GST_CHECK_VERSION(1,0,0)
 	gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(GST_MESSAGE_SRC(message)), window_handle);
-#elif GST_CHECK_VERSION(0,10,31)
-	gst_x_overlay_set_window_handle(GST_X_OVERLAY(GST_MESSAGE_SRC(message)), window_handle);
-#else
-	gst_x_overlay_set_xwindow_id(GST_X_OVERLAY(GST_MESSAGE_SRC(message)), window_handle);
-#endif
 	gst_message_unref(message);
 	return GST_BUS_DROP;
 }
@@ -150,6 +245,7 @@ void* videoDisplay(void*) {
 	     NULL);
 	*/
 
+
 	/*
 	    Hardware-accelerated, but hardcoded pipeline:
 
@@ -157,14 +253,15 @@ void* videoDisplay(void*) {
 	        \-> hardware encode h264 -> stream per as RTP over UDP
    	*/
 	pipeline = gst_parse_launch(
-	    " appsrc is-live=TRUE name=streamViewer ! "                         
+	    " appsrc is-live=TRUE name=streamViewer ! " 
+	                            
 	    "   video/x-bayer ! "
         " bayer2rgb ! "
         "   video/x-raw, format=(string)BGRx ! "
         " videoconvert ! "
-        //" video/x-raw, format=(string)BGRx ! "
-        //" queue ! "
+        
 	    " tee name=forkRaw2ShowNEnc ! "
+	    
             " queue ! "
             " videoscale add-borders=TRUE ! "
             " capsfilter name=scale ! "
@@ -173,9 +270,7 @@ void* videoDisplay(void*) {
             
             " forkRaw2ShowNEnc. ! "
             " queue ! "
-            //" videoscale ! "
-            //" video/x-raw, width=(int)3072, height=(int)3072 ! "
-        
+
             " nvvidconv ! "
             //" video/x-raw(memory:NVMM), format=(string)GRAY8, width=(int)3072, height=(int)3072 ! "
             //" nvvidconv ! "
@@ -191,40 +286,41 @@ void* videoDisplay(void*) {
             ,
 	     NULL);
 
-//" video/x-raw(memory:NVMM), format=(string)NV12 ! "
-//" nvv4l2h264enc maxperf-enable=true ! "
-	/* For 4k encoding performance testing 
-   		(2k@120 Hz make problems, hence trying 4k@30,
-        which is our target resolution)
-    */
-    //BOOLEAN doQuadrupleImage_debug = TRUE;
-// nvcompositor \
-  name=comp sink_0::xpos=0 sink_0::ypos=0 sink_0::width=1920 \
-  sink_0::height=1080 
+                //" video/x-raw(memory:NVMM), format=(string)NV12 ! "
+                //" nvv4l2h264enc maxperf-enable=true ! "
+	                /* For 4k encoding performance testing 
+                   		(2k@120 Hz make problems, hence trying 4k@30,
+                        which is our target resolution)
+                    */
+                    //BOOLEAN doQuadrupleImage_debug = TRUE;
+                // nvcompositor \
+                  name=comp sink_0::xpos=0 sink_0::ypos=0 sink_0::width=1920 \
+                  sink_0::height=1080 
 
-//            " video/x-bayer, format=(string)bggr ! "
- //           " bayer2rgb ! "
-   //         " queue ! "
+                //            " video/x-bayer, format=(string)bggr ! "
+                 //           " bayer2rgb ! "
+                   //         " queue ! "
 
-	/*
-	    Hardware-accelerated, but hardcoded pipeline:
+	                /*
+	                    Hardware-accelerated, but hardcoded pipeline:
 
-	    cam -> hardware encode h264 -> stream per as RTP over UDP
+	                    cam -> hardware encode h264 -> stream per as RTP over UDP
 
-	pipeline = gst_parse_launch(
-	    "appsrc is-live=TRUE name=streamViewer ! "
-            " queue ! "
-            " nvvidconv ! "
-            " video/x-raw(memory:NVMM), format=(string)NV12 ! "
-            " nvv4l2h264enc ! "
-            " h264parse ! "
-            " queue ! "
-            " rtph264pay ! "
-            " udpsink host=192.168.0.169 port=5001 sync=false ",
-	     NULL);
-	 */
-//" video/xraw(memory:NVMM), width=(int)4096, height=(int)4096, format=(string)GRAY8 ! "
-//" nvv4l2h264enc maxperf-enable=true ! "
+	                pipeline = gst_parse_launch(
+	                    "appsrc is-live=TRUE name=streamViewer ! "
+                            " queue ! "
+                            " nvvidconv ! "
+                            " video/x-raw(memory:NVMM), format=(string)NV12 ! "
+                            " nvv4l2h264enc ! "
+                            " h264parse ! "
+                            " queue ! "
+                            " rtph264pay ! "
+                            " udpsink host=192.168.0.169 port=5001 sync=false ",
+	                     NULL);
+	                 */
+                //" video/xraw(memory:NVMM), width=(int)4096, height=(int)4096, format=(string)GRAY8 ! "
+                //" nvv4l2h264enc maxperf-enable=true ! "
+
 
 	if(!pipeline)
 		goto exit;
@@ -487,7 +583,8 @@ struct ctrl_window {
         *run;
 };
 
-gboolean time_handler(ctrl_window *ctrl) {
+gboolean time_handler(ctrl_window *ctrl) 
+{
 	int level = 0;
 	if(acquire && handle != INVALID_HANDLE_VALUE) {
 		xiSetParamInt(handle, XI_PRM_GPI_SELECTOR, 1);
@@ -503,7 +600,9 @@ gboolean time_handler(ctrl_window *ctrl) {
 		xiGetParamInt(handle, XI_PRM_GPI_LEVEL, &level);
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ctrl->gpi4), level);
 	}
-	gtk_toggle_button_set_inconsistent(GTK_TOGGLE_BUTTON(ctrl->run), gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ctrl->run)) != acquire);
+	gtk_toggle_button_set_inconsistent(
+	  GTK_TOGGLE_BUTTON(ctrl->run), 
+	  gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ctrl->run)) != acquire);
 	gtk_widget_set_sensitive(ctrl->boxx, acquire);
 	gtk_widget_set_sensitive(ctrl->boxy, acquire);
 	gtk_widget_set_sensitive(ctrl->exp, acquire);
@@ -621,16 +720,11 @@ gboolean update_run(GtkToggleButton *run, ctrl_window *ctrl) {
 		if(isColor)
 			xiSetParamInt(handle, XI_PRM_AUTO_WB, 1);
 
-		//xiSetParamInt(handle, XI_PRM_EXPOSURE, 10000);
-		//gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 10);
-
-		// slightly more than 60fps
-		//xiSetParamInt(handle, XI_PRM_EXPOSURE, 15000);
-		//gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 15);
-		
-		// slightly more than 30fps
-		xiSetParamInt(handle, XI_PRM_EXPOSURE, 30000);
-		gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 30);
+        // set exposure from CLI arg
+		xiSetParamInt(handle, XI_PRM_EXPOSURE, 1000 * globalAppArgs.exposure_ms);
+		gtk_adjustment_set_value(
+		    gtk_range_get_adjustment(GTK_RANGE(ctrl->exp)), 
+		    globalAppArgs.exposure_ms);
 		
 		if(pthread_create(&videoThread, NULL, videoDisplay, NULL))
 			exit(1);
@@ -642,14 +736,43 @@ gboolean update_run(GtkToggleButton *run, ctrl_window *ctrl) {
 	return TRUE;
 }
 
+
+
 gboolean start_cb(ctrl_window* ctrl) {
 	//start acquisition
 	update_run(GTK_TOGGLE_BUTTON(ctrl->run), ctrl);
 	return FALSE;
 }
 
+
+//-----------------------------------------------------------------------------
 int main(int argc, char **argv)
-{
+{    
+    //{ parse args ------------------------------------------------------------
+    
+    /* Default values. */
+    globalAppArgs.doDisplay = false;
+    globalAppArgs.output_file = nullptr;
+    globalAppArgs.exposure_ms = 30;
+    globalAppArgs.IP = "192.168.0.169";
+    globalAppArgs.port = "5001";
+
+   
+    /* Parse our arguments; every option seen by parse_opt will
+       be reflected in arguments. */
+    argp_parse (&argp, argc, argv, 0, 0, &globalAppArgs);
+
+    printf ("IP = %s\nPort = %s\nExposure = %i\n"
+            "OUTPUT_FILE = %s\ndisplay locally = %s\n",
+            globalAppArgs.IP, 
+            globalAppArgs.port,
+            globalAppArgs.exposure_ms,
+            globalAppArgs.output_file ? globalAppArgs.output_file : "-none-",
+            globalAppArgs.doDisplay ? "yes" : "no");
+
+    //exit(0);
+    //} end parse args --------------------------------------------------------
+
 	ctrl_window ctrl;
 #ifdef GDK_WINDOWING_X11
 	XInitThreads();
