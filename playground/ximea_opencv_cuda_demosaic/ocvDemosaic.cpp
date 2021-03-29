@@ -7,12 +7,21 @@
 
 #include <sys/time.h>
 
+ #include <unistd.h> // usleep
+
+//#include <set>
+
 
 // Define the number of images acquired, processed and shown in this example
 #define NUMBER_OF_IMAGES 10000
+
+
 //set to 0 to get rid of overhead of setting up the GUI/showing the image
 #define DO_SHOW_IMAGE 1
-
+// don't let RAM overflow and let latency explode unrecoverably,
+// rather skip frames
+#define MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 8
+#define STATUS_STRING_LENGTH 512
 
 // Define parameters for a static white balance
 #define WB_BLUE 2
@@ -21,6 +30,62 @@
 
 using namespace cv;
 using namespace std;
+
+
+struct CudaFrameData
+{
+    CudaFrameData()
+    : bufferIndex(0),
+      slotIsUsed(false),
+      cudaHostMemory(nullptr),
+      hostRawMat()
+      //hostRawMatInputArray()
+    {}
+
+    int bufferIndex; // backtracking into ApplicationState::cudaFrameDataArray
+    // Status flag: Is data slot used by cuda right now?
+    bool slotIsUsed; 
+    
+    //pointer to CUDA host data where the Ximea captured frame is mapped to
+    void* cudaHostMemory; 
+    // wrappers for cudaHostMemory for async GPU upload
+    cv::Mat hostRawMat;
+    //cv::InputArray hostRawMatInputArray;
+    
+    cuda::GpuMat gpuRawMatrix;   // OpenCV+Cuda-representation of XIMEA image
+    cuda::GpuMat gpuColorMatrix; // debayered result image
+};
+
+// init to zeros/false via memset
+struct ApplicationState
+{
+    bool doDisplayProcessedImage; //yes, not showing anything is the default
+        
+    // for asynchronous processing of CUDA stuff: has to be initialized
+    cv::cuda::Stream cudaDemoisaicStream;
+    
+    // minimalistic memory pool for GPU matrix objects, used by cuda stream
+    CudaFrameData* cudaFrameDataArray; //[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
+    
+    
+    unsigned long current_time = 0;
+    unsigned long prev_time = 0;
+    
+    char status_string[STATUS_STRING_LENGTH];
+      
+    unsigned long current_captured_frame_count = 0;
+    unsigned long prev_captured_frame_count = 0;
+    unsigned long last_camera_frame_count = 0;
+    unsigned long lost_frames_count = 0;
+    
+    unsigned long cuda_processed_frame_count = 0;
+
+};
+
+ApplicationState globalAppState;
+
+
+
 
 //microseconds
 inline unsigned long getcurus() {
@@ -32,7 +97,46 @@ inline unsigned long getcurus() {
 
 
 
-int main(){
+//typedef void(* 	StreamCallback) (int status, void *userData)
+void cudaDemosaicStreamCallback(int status, void *userData)
+{
+    if(status != cudaSuccess)
+    {
+        printf("Error in Cuda stream! Aborting");
+        exit(1);
+    }
+    
+    CudaFrameData * currentCudaFrameData = 
+      static_cast<CudaFrameData *>(userData);
+     
+    
+    globalAppState.cuda_processed_frame_count ++;
+    
+    /*
+    if(DO_SHOW_IMAGE)
+    {   
+        // Render image to the screen (using OpenGL) 
+        //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
+        
+        //only show every nth frame:
+        if(globalAppState.cuda_processed_frame_count % 320 == 0)
+        {
+            //blocking copy
+            cuda::GpuMat gpuColorMatrixToShow (
+              currentCudaFrameData->gpuColorMatrix);
+            
+            imshow("XIMEA camera", gpuColorMatrixToShow);
+       }
+    }
+    */
+
+    //free slot for reusal:
+    currentCudaFrameData->slotIsUsed=false;
+}
+
+
+int main()
+{
   // Initialize XI_IMG structure
   XI_IMG image;
   memset(&image, 0, sizeof(XI_IMG));
@@ -42,7 +146,8 @@ int main(){
   XI_RETURN stat = XI_OK;
 
   // Simplyfied error handling (just for demonstration)
-  try{
+  try
+  {
     int cfa = 0;
     int OCVbayer = 0;
 
@@ -135,8 +240,10 @@ int main(){
     // Start the image acquisition
     stat = xiStartAcquisition(xiH);
     if (stat != XI_OK)
+    {
       throw "Starting image acquisition failed";
-
+    }
+    
     if(DO_SHOW_IMAGE)
     {
         // Create a GUI window with OpenGL support
@@ -147,36 +254,209 @@ int main(){
         //resizeWindow("XIMEA camera", 1600 , 1000);
     }
  
-    // Define pointer used for data on GPU
-    void *imageGpu;
+    // Define pointer used for (CUDA) data on GPU
+    //void *imageGpu;
 
-    // Create GpuMat for the result images
-    cuda::GpuMat gpu_mat_color(height, width, CV_8UC3);
-  
-  
-    int const WINDOW_TITLE_LENGTH = 512;
-    char title_string[WINDOW_TITLE_LENGTH];
+
+    //{ init app state:
+      // to zeros ...
+      memset(&globalAppState, 0, sizeof(ApplicationState));
+
+      globalAppState.cudaDemoisaicStream = cv::cuda::Stream();
       
-    unsigned long current_captured_frame_count = 0;
-    unsigned long prev_captured_frame_count = 0;
-    unsigned long last_camera_frame_count = 0;
-    unsigned long lost_frames_count = 0;
-    unsigned long current_time = 0;
-    unsigned long prev_time = 0;
+      globalAppState.cudaFrameDataArray = 
+        new CudaFrameData[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
+         
+      // init GpuMats in case they are repurposed later without reinit:
+      for(int i = 0; i < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES; i++)
+      {
+        CudaFrameData * currentCudaFrameData = 
+          & (globalAppState.cudaFrameDataArray[i]);
+      
+        currentCudaFrameData->gpuRawMatrix = 
+          cuda::GpuMat(height, width, CV_8UC1);  
+        currentCudaFrameData->gpuColorMatrix =
+          cuda::GpuMat(height, width, CV_8UC3);
+      }
+    //}
+
   
-    prev_time = getcurus();
+  
+    globalAppState.prev_time = getcurus();
   
     // Acquire a number of images, process and render them
-    for (int i = 0; i < NUMBER_OF_IMAGES; i++){
- 
+    for (int i = 0; i < NUMBER_OF_IMAGES; i++)
+    {
     
       // Get host-pointer to image data
       stat = xiGetImage(xiH, 5000, &image);
       if (stat != XI_OK)
+      {
         throw "Getting image from camera failed";
+      }
+ 
+      //{ trying to parallelize cam image acquisition and cuda processing:
+      int currentGpuMatIndex = 0;
+      while(currentGpuMatIndex < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES)
+      {
+        // is slot already used?
+        if(globalAppState.cudaFrameDataArray[currentGpuMatIndex].slotIsUsed)
+        {
+            currentGpuMatIndex++;
+        }
+        else
+        {
+          // set slot to "used" and stop checking the rest
+          globalAppState.cudaFrameDataArray[currentGpuMatIndex].slotIsUsed = 
+            true;
+          break;
+        }
+      }
+      // all slots used?
+      if(currentGpuMatIndex >= MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES)
+      {
+        printf("Cuda queue is full! Skipping processing of acquired frame frame and sleeping for 1ms!");
+        // sleep for 1ms=1000microseconds; TODO handle this via mutexes etc.
+        usleep(1000);
+        // skip this execution
+        continue;
+      }
+
+
+
+
+      CudaFrameData * currentCudaFrameData = 
+        & (globalAppState.cudaFrameDataArray[currentGpuMatIndex]);
+
+      currentCudaFrameData->bufferIndex = currentGpuMatIndex;
+      currentCudaFrameData->slotIsUsed = true;
+        
+
+      //{ Blocking impl:
+      /*
+      // Convert Ximea image to cuda device pointer
+      cudaHostGetDevicePointer(
+        &currentCudaFrameData->cudaHostMemory, image.bp, 0);
+      // Create GpuMat from the cuda device pointer
+      currentCudaFrameData->gpuRawMatrix =
+        cuda::GpuMat(height, width, CV_8UC1, &currentCudaFrameData->cudaHostMemory); 
+      // Create GpuMat for the result image
+      currentCudaFrameData->gpuColorMatrix =
+        cuda::GpuMat(height, width, CV_8UC3); 
+      //}
+      */
+      
+      //{ Non-Blocking impl:
+      cudaHostGetDevicePointer(
+        &currentCudaFrameData->cudaHostMemory, image.bp, 0);
+      //CudaMem hostSrc(height, width, CV_8UC1, CudaMem::ALLOC_PAGE_LOCKED);
+
+      // upload data from host: 
+      // wrapper arond host mem:   
+      const int	sizes[] = {height, width};
+      currentCudaFrameData->hostRawMat =
+        cv::Mat(
+          2, //int 	ndims,
+          sizes, //const int * 	sizes,
+          CV_8UC1, //int 	type,
+          currentCudaFrameData->cudaHostMemory, // void * 	data,
+          0 //const size_t * 	steps = 0 
+        ); 
+      currentCudaFrameData->gpuRawMatrix.upload(
+        cv::InputArray(currentCudaFrameData->hostRawMat),
+        globalAppState.cudaDemoisaicStream);
+      //}
+      
+
+
+
+   
+      // Demosaic raw bayer image to color image
+      cuda::demosaicing(
+        currentCudaFrameData->gpuRawMatrix, 
+        currentCudaFrameData->gpuColorMatrix, 
+        OCVbayer, 
+        0, // derive channel layout from other params
+        globalAppState.cudaDemoisaicStream );
+     
+        
+      // Apply static white balance by multiplying the channels
+      //cuda::multiply(gpu_mat_color, cv::Scalar(WB_BLUE, WB_GREEN, WB_RED), gpu_mat_color);
+
+
+   
+      globalAppState.cudaDemoisaicStream.enqueueHostCallback(	
+        cudaDemosaicStreamCallback, // StreamCallback 	callback,
+        currentCudaFrameData // void * 	userData 
+      );	
+      
+
+      //{ FPS calcs: ----------------------------------------------------------
+	  globalAppState.current_captured_frame_count++;
+	  if(image.nframe > globalAppState.last_camera_frame_count)
+	  {
+			globalAppState.lost_frames_count += image.nframe - (globalAppState.last_camera_frame_count + 1);
+	  } 
+	  globalAppState.last_camera_frame_count = image.nframe;
+      globalAppState.current_time = getcurus();
+      //update around each second:
+	  if(globalAppState.current_time - globalAppState.prev_time > 1000000) 
+	  {
+			snprintf(
+			    globalAppState.status_string, 
+			    STATUS_STRING_LENGTH, 
+			    "Acquisition [ Acquired: %lu, processed: %lu, skipped: %lu, fps: %.2f ]\n", 
+			    globalAppState.current_captured_frame_count, 
+			    globalAppState.cuda_processed_frame_count,
+			    globalAppState.lost_frames_count, 
+			    1000000.0 * 
+			      (globalAppState.current_captured_frame_count - globalAppState.prev_captured_frame_count) 
+			     / (globalAppState.current_time - globalAppState.prev_time)
+			);
+			printf("%s",globalAppState.status_string);
+			
+			globalAppState.prev_captured_frame_count = globalAppState.current_captured_frame_count;
+			globalAppState.prev_time = globalAppState.current_time;  
+	  }
+      //}  --------------------------------------------------------------------
+
+
+
+     if(DO_SHOW_IMAGE)
+     {   
+        // Render image to the screen (using OpenGL) 
+        //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
+        
+        //only show every nth frame:
+        if(globalAppState.cuda_processed_frame_count % 3 == 0)
+        {
+            //block for show:
+            globalAppState.cudaDemoisaicStream.waitForCompletion();
+            
+           
+            //cuda::GpuMat gpuColorMatrixToShow (
+            //  currentCudaFrameData->gpuColorMatrix);
+            
+            imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
+       }
+     }
+
+
+      /* outsourced to cuda callback
+      if(DO_SHOW_IMAGE)
+      {
+          // Render image to the screen (using OpenGL) 
+          imshow("XIMEA camera", gpu_mat_color); 
+           
+          //imshow("XIMEA camera", gpu_mat_raw);      
+          //test without OpenGL:
+          //imshow("XIMEA camera non-GL", debugCPURawMat);      
+      }
+      */
+      
       
       /*
-      // pure CPU test: for debugging if cuda makes problems: 
+      //{  pure CPU test: for debugging if cuda makes problems:  --------------
       // answer: cuda works fine, but OpenCV has problems with Qt5:
       // https://forums.developer.nvidia.com/t/black-images-with-qt5-and-opengl/70864/7
       // Building with QT4 resolves the issues!
@@ -190,59 +470,10 @@ int main(){
         0 //const size_t * 	steps = 0 
       );
       cv::InputArray debugCPURawCVImage(debugCPURawMat);
+      //} ---------------------------------------------------------------------
       */
-       
       
-      // Convert to device pointer
-      cudaHostGetDevicePointer(&imageGpu, image.bp, 0);
-      // Create GpuMat from the device pointer
-      cuda::GpuMat gpu_mat_raw(height, width, CV_8UC1, imageGpu);
-      // Demosaic raw bayer image to color image
-      cuda::demosaicing(gpu_mat_raw, gpu_mat_color, OCVbayer);
-      // Apply static white balance by multiplying the channels
-      //cuda::multiply(gpu_mat_color, cv::Scalar(WB_BLUE, WB_GREEN, WB_RED), gpu_mat_color);
-
-
-      // FPS calcs: ------------------------------------------------------------      
-	  current_captured_frame_count++;
-	  if(image.nframe > last_camera_frame_count)
-	  {
-			lost_frames_count += image.nframe - (last_camera_frame_count + 1);
-	  } 
-	  last_camera_frame_count = image.nframe;
-      current_time = getcurus();
-      //update around each second:
-	  if(current_time - prev_time > 1000000) 
-	  {
-			snprintf(
-			    title_string, 
-			    WINDOW_TITLE_LENGTH, 
-			    "Acquisition [ captured: %lu, skipped: %lu, fps: %.2f ]\n", 
-			    current_captured_frame_count, 
-			    lost_frames_count, 
-			    1000000.0 * (current_captured_frame_count - prev_captured_frame_count) 
-			     / (current_time - prev_time)
-			);
-			printf("%s",title_string);
-			
-			prev_captured_frame_count = current_captured_frame_count;
-			prev_time = current_time;  
-		}
-
-
-
-
-      if(DO_SHOW_IMAGE)
-      {
-          // Render image to the screen (using OpenGL) 
-          imshow("XIMEA camera", gpu_mat_color); 
-           
-          //imshow("XIMEA camera", gpu_mat_raw);      
-          //test without OpenGL:
-          //imshow("XIMEA camera non-GL", debugCPURawMat);      
-      }
-      
-      
+      // prevent window gray-out
       waitKey(1);
     }
     
