@@ -11,19 +11,46 @@
 #include <gst/app/gstappsrc.h>
 
 #include <gst/video/videooverlay.h>
-#define VIDEOCONVERT "videoconvert"
 
+#include <m3api/xiApi.h> //Ximea API
 
-#include <m3api/xiApi.h>
-
-#include <argp.h>
-
-
-
-//{ parsing CLI options --------------------------------------------------------
 #include <stdlib.h>
-#include <argp.h>
+#include <argp.h> // CLI arguments parsing
 
+
+// ---------------------------------------------------------------------------
+//{ KLV experiments
+//endianess converting (for KLV metadata)
+#include <stdint.h>   // For 'uint64_t'
+#include <endian.h>   // htobe64  be64toh (host to big endian 64)
+
+// don't know if low keys are reserved or forbidden or sth...
+#define KLV_KEY_OFFSET 0
+enum HOMEBREW_KLV_keys
+{
+    KLV_KEY_invalid  = 0 + KLV_KEY_OFFSET,
+    KLV_KEY_string   = 1 + KLV_KEY_OFFSET,
+    KLV_KEY_uint64   = 2 + KLV_KEY_OFFSET,
+    KLV_KEY_float64  = 3 + KLV_KEY_OFFSET,
+    
+    KLV_KEY_camera_ID = 4 + KLV_KEY_OFFSET,
+    
+    KLV_KEY_image_capture_time_stamp  = 5 + KLV_KEY_OFFSET,
+    KLV_KEY_navigation_data_time_stamp  = 6 + KLV_KEY_OFFSET,
+    
+    KLV_KEY_image_frame_number  = 7 + KLV_KEY_OFFSET,
+    KLV_KEY_navigation_data_frame_number = 8 + KLV_KEY_OFFSET,
+    
+    KLV_KEY_navigation_data_payload = 9 + KLV_KEY_OFFSET,
+    KLV_KEY_image_statistics = 10 + KLV_KEY_OFFSET,
+    
+    KLV_KEY_num_keys = 11
+};
+// ---------------------------------------------------------------------------
+//} KLV experiments
+
+
+//{ parsing CLI options -------------------------------------------------------
 const char *argp_program_version =
   "ximeaJetsonStream 0.2.0";
 const char *argp_program_bug_address =
@@ -57,8 +84,6 @@ struct ApplicationArguments
   
   int exposure_ms;
 };
-
-ApplicationArguments globalAppArgs;
 
 
 
@@ -122,16 +147,24 @@ static struct argp argp = { options, parse_opt, args_doc, doc };
 
 // ----------------------------------------------------------------------------
 //{ Global variables; TODO organize
+ApplicationArguments globalAppArgs;
+
 BOOLEAN acquire, quitting, render = TRUE;
 int maxcx, maxcy, roix0, roiy0, roicx, roicy;
 pthread_t videoThread;
 HANDLE handle = INVALID_HANDLE_VALUE;
 guintptr window_handle;
+
 //}
 
 
 
-inline unsigned long getcurus() {
+
+
+
+
+inline unsigned long getcurus() 
+{
 	struct timeval now;
 	gettimeofday(&now, NULL);
 	return now.tv_sec * 1000000 + now.tv_usec;
@@ -150,8 +183,6 @@ GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, gpointer)
 
 
 
-#define VIDEOSINK "xvimagesink"
-
 
 void video_widget_realize_cb(GtkWidget* widget, gpointer) 
 {
@@ -162,7 +193,8 @@ void video_widget_realize_cb(GtkWidget* widget, gpointer)
 }
 
 
-gboolean close_cb(GtkWidget*, GdkEvent*, gpointer quit) {
+gboolean close_cb(GtkWidget*, GdkEvent*, gpointer quit) 
+{
 	quitting = quit ? TRUE : FALSE;
 	if(videoThread)
 		acquire = FALSE;
@@ -177,15 +209,15 @@ void* videoDisplay(void*)
 {	
 	GstElement *pipeline = 0;
 	GstElement *appsrc = 0;
-	GstElement *scale = 0;
+	GstElement *scale_element = 0;
 	GstElement *mpegtsmux = 0;
 	
 	GstFlowReturn ret;
 	GstBuffer *buffer = 0;
 	GstBus *bus = 0;
-	GstCaps *caps = 0;
+	GstCaps *appsrc_caps = 0;
 	GstCaps *size_caps = 0;
-	
+    GstCaps *klv_caps = 0;
 	
 	int max_width, max_height;
 	int prev_width = -1;
@@ -265,9 +297,9 @@ void* videoDisplay(void*)
             " fork_raw_to_show_and_enc. ! "
             " queue ! "
             " videoscale add-borders=TRUE ! "
-            " capsfilter name=scale ! "
-            VIDEOCONVERT " ! " 
-            VIDEOSINK
+            " capsfilter name=scale_element ! "
+            " videoconvert ! " 
+            " xvimagesink "
             ""
             " fork_raw_to_show_and_enc. ! "
             ,
@@ -354,13 +386,34 @@ void* videoDisplay(void*)
 	
 	appsrc = gst_bin_get_by_name(GST_BIN(pipeline), "streamViewer");
 	
-	scale = gst_bin_get_by_name(GST_BIN(pipeline), "scale");
+	scale_element = gst_bin_get_by_name(GST_BIN(pipeline), "scale_element");
 	
+	
+	//-------------------------------------------------------------------------
 	//{ prepare muxer for KLV buffer injection
 	mpegtsmux = gst_bin_get_by_name(GST_BIN(pipeline), "mpegtsmux");
 
+    //klv_caps
+    
+    
 	//gst_element_request_pad
-	//}
+	
+	/*
+				if(size_caps)
+				{
+					gst_caps_unref(size_caps);
+				}
+				
+				size_caps = 
+				    gst_caps_new_simple(
+						"video/x-raw",
+						"width", G_TYPE_INT, width, 
+						"height", G_TYPE_INT, height, 
+						NULL);
+						
+				g_object_set(G_OBJECT(scale_element), "caps", size_caps, NULL);
+	*/
+	//} -----------------------------------------------------------------------
 	
 	
 	
@@ -424,13 +477,13 @@ void* videoDisplay(void*)
 			
 			 
 			 
-			//{ Timestamp stuff
+			//{ Timestamp stuff -----------------------------------------------
             GST_BUFFER_TIMESTAMP(buffer) = GST_CLOCK_TIME_NONE;
 			curtime = getcurus();
 			// This works: Presentation time stamp (PTS) from system time, 
 			//  NOT GstClock! TODO setup a working GstClock (PTP)
 			GST_BUFFER_PTS(buffer) = (guint64) (curtime - firsttime) * GST_USECOND ;
-			//}
+			//} ---------------------------------------------------------------
 			
 			
 			
@@ -438,14 +491,14 @@ void* videoDisplay(void*)
 		        prev_height != image.height ||
 			    prev_format != image.frm) 
 			{
-				if(caps)
-					gst_caps_unref(caps);
+				if(appsrc_caps)
+					gst_caps_unref(appsrc_caps);
 				
 				/*
 				printf("DEBUG: BGRx from debayering;\n");
 				int wid_half= image.width/2;
 				int height_half= image.height/2;
-			    caps = gst_caps_new_simple(
+			    appsrc_caps = gst_caps_new_simple(
 							"video/x-raw",
 							"format", G_TYPE_STRING, "BGRx",
 							"bpp", G_TYPE_INT, 32,
@@ -467,7 +520,7 @@ void* videoDisplay(void*)
 				{   
 				    /* old raw stuff w/o debayering
 				    printf("DEBUG: GRAY8\n");
-					caps = gst_caps_new_simple(
+					appsrc_caps = gst_caps_new_simple(
 							"video/x-raw",
 							"format", G_TYPE_STRING, "GRAY8",
 							"bpp", G_TYPE_INT, 8,
@@ -479,7 +532,7 @@ void* videoDisplay(void*)
 					*/		
 					
 					printf("DEBUG: Appsrc has bayer caps!;\n");
-					caps = gst_caps_new_simple(
+					appsrc_caps = gst_caps_new_simple(
 							"video/x-bayer",
 							"format", G_TYPE_STRING, "bggr",
 							"bpp", G_TYPE_INT, 8,
@@ -494,7 +547,7 @@ void* videoDisplay(void*)
 				else if(image.frm == XI_RGB32)
 				{
 				    printf("DEBUG: RGB32\n");
-					caps = gst_caps_new_simple(
+					appsrc_caps = gst_caps_new_simple(
 							"video/x-raw",
 							"format", G_TYPE_STRING, "BGRx",
 							"bpp", G_TYPE_INT, 32,
@@ -517,7 +570,7 @@ void* videoDisplay(void*)
 				
 				
 				gst_element_set_state(pipeline, GST_STATE_PAUSED);
-				gst_app_src_set_caps(GST_APP_SRC(appsrc), caps);
+				gst_app_src_set_caps(GST_APP_SRC(appsrc), appsrc_caps);
 				gst_element_set_state(pipeline, GST_STATE_PLAYING);
 				prev_width = image.width;
 				prev_height = image.height;
@@ -542,7 +595,7 @@ void* videoDisplay(void*)
 						"height", G_TYPE_INT, height, 
 						NULL);
 						
-				g_object_set(G_OBJECT(scale), "caps", size_caps, NULL);
+				g_object_set(G_OBJECT(scale_element), "caps", size_caps, NULL);
 				
 				gdk_threads_enter();
 				gtk_window_resize(GTK_WINDOW(videoWindow), width, height);
@@ -591,8 +644,8 @@ void* videoDisplay(void*)
 	
 	
     //{ cleanup	
-	if(caps)
-		gst_caps_unref(caps);
+	if(appsrc_caps)
+		gst_caps_unref(appsrc_caps);
 	if(size_caps)
 		gst_caps_unref(size_caps);
 	gst_app_src_end_of_stream(GST_APP_SRC(appsrc));
