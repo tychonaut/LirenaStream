@@ -117,17 +117,30 @@ parse_opt (int key, char *arg, struct argp_state *state)
 
 /* Our argp parser. */
 static struct argp argp = { options, parse_opt, args_doc, doc };
-//} ----------------------------------------------------------------------------
+//} ---------------------------------------------------------------------------
 
 
-
+// ----------------------------------------------------------------------------
+//{ Global variables; TODO organize
 BOOLEAN acquire, quitting, render = TRUE;
 int maxcx, maxcy, roix0, roiy0, roicx, roicy;
 pthread_t videoThread;
 HANDLE handle = INVALID_HANDLE_VALUE;
 guintptr window_handle;
+//}
 
-GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, gpointer) {
+
+
+inline unsigned long getcurus() {
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	return now.tv_sec * 1000000 + now.tv_usec;
+}
+
+
+
+GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, gpointer) 
+{
 	if(!gst_is_video_overlay_prepare_window_handle_message(message))
 		return GST_BUS_PASS;
 	gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(GST_MESSAGE_SRC(message)), window_handle);
@@ -135,26 +148,19 @@ GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, gpointer) {
 	return GST_BUS_DROP;
 }
 
-#if defined(GDK_WINDOWING_X11)
+
+
 #define VIDEOSINK "xvimagesink"
-void video_widget_realize_cb(GtkWidget* widget, gpointer) {
+
+
+void video_widget_realize_cb(GtkWidget* widget, gpointer) 
+{
 	GdkWindow *window = gtk_widget_get_window(widget);
 	if (!gdk_window_ensure_native(window))
 		g_error ("Couldn't create native window needed for GstXOverlay!");
 	window_handle = GDK_WINDOW_XID(window);
 }
-#elif defined(GDK_WINDOWING_QUARTZ)
-#define VIDEOSINK "osxvideosink"
-void video_widget_realize_cb(GtkWidget*, gpointer);
-#else
-#error Unsupported GDK backend
-#endif
 
-inline unsigned long getcurus() {
-	struct timeval now;
-	gettimeofday(&now, NULL);
-	return now.tv_sec * 1000000 + now.tv_usec;
-}
 
 gboolean close_cb(GtkWidget*, GdkEvent*, gpointer quit) {
 	quitting = quit ? TRUE : FALSE;
@@ -165,22 +171,32 @@ gboolean close_cb(GtkWidget*, GdkEvent*, gpointer quit) {
 	return TRUE;
 }
 
-void* videoDisplay(void*) {
-	GtkWidget *videoWindow;
-	GdkScreen *screen;
-	GstElement *pipeline, *appsrc, *scale;
+
+
+void* videoDisplay(void*) 
+{	
+	GstElement *pipeline = 0;
+	GstElement *appsrc = 0;
+	GstElement *scale = 0;
+	GstElement *mpegtsmux = 0;
+	
 	GstFlowReturn ret;
-	GstBuffer *buffer;
-	GstBus *bus;
+	GstBuffer *buffer = 0;
+	GstBus *bus = 0;
 	GstCaps *caps = 0;
 	GstCaps *size_caps = 0;
+	
+	
 	int max_width, max_height;
 	int prev_width = -1;
 	int prev_height = -1;
 	
+	gchar statistics_string[256];
 	unsigned long frames = 0;
 	unsigned long prevframes = 0;
 	unsigned long lostframes = 0;
+	long lastframe = -1;
+	
 	
 	unsigned long curtime, prevtime;
     unsigned long firsttime = getcurus();
@@ -188,14 +204,23 @@ void* videoDisplay(void*) {
     
 	
 	
-	long lastframe = -1;
 	
-	gchar title[256];
 	XI_IMG_FORMAT prev_format = XI_RAW8;
 	XI_IMG image;
 	image.size = sizeof(XI_IMG);
 	image.bp = NULL;
 	image.bp_size = 0;
+	
+	if(xiStartAcquisition(handle) != XI_OK) 
+	{
+		goto exit;
+	}
+	
+	
+	
+	GtkWidget *videoWindow;
+	GdkScreen *screen;
+	
 	gdk_threads_enter();
 	videoWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title(GTK_WINDOW(videoWindow), "streamViewer");
@@ -205,56 +230,12 @@ void* videoDisplay(void*) {
 	gtk_widget_show_all(videoWindow);
 	gtk_widget_realize(videoWindow);
 	screen = gdk_screen_get_default();
-	max_width = 0.8*gdk_screen_get_width(screen);
-	max_height = 0.8*gdk_screen_get_width(screen);
+	max_width = 0.8 * gdk_screen_get_width(screen);
+	max_height = 0.8 * gdk_screen_get_width(screen);
 	gdk_threads_leave();
-	if(xiStartAcquisition(handle) != XI_OK)
-		goto exit;
+	
+
 		
-		
-	/*
-	    old snippet: the que made severe problems in bash
-	    for whatever reason; this wasn't new to me, though;
-	    this bug or weird bihavior of linear (non-branching)
-	    pipeline has happend before.
-	    " queue max-size-buffers=2 leaky=2 ! "
-	    " videoscale add-borders=TRUE ! "
-	    " capsfilter name=scale ! "
-	*/
-
-	/*
-	    Hardware-accelerated, but hardcoded pipeline:
-
-	    cam -> show on screen
-	        \-> hardware encode h264 -> write to disk
-	                                \-> stream per as RTP over UDP
-
-	pipeline = gst_parse_launch(
-	    "appsrc is-live=TRUE name=streamViewer ! "
-	    " tee name=forkRaw2ShowNEnc ! "
-            " queue ! "
-            " videoscale add-borders=TRUE ! "
-            " capsfilter name=scale ! "
-            VIDEOCONVERT " ! " 
-            VIDEOSINK
-            " forkRaw2ShowNEnc. ! "
-            " queue ! "
-            " nvvidconv ! "
-            " nvv4l2h264enc maxperf-enable=true ! "
-            " h264parse ! "
-            " tee name=forkEnc2Disk_and_UDP "
-            ""
-            " forkEnc2Disk_and_UDP. ! "
-            " queue ! "
-            " filesink location=%s -e "
-            ""
-            " forkEnc2Disk_and_UDP. ! "
-            " queue ! "
-            " rtph264pay ! "
-            " udpsink host=192.168.0.169 port=5001 sync=false ",
-	     NULL);
-	*/
-
 
 
    	// ten thousand chars are hopefully sufficient...
@@ -314,21 +295,16 @@ void* videoDisplay(void*) {
             ,
             globalAppArgs.output_file);
     }
-
-    
-
-
     
 	/*
-	    Full pipeline would look like:
+	    Full pipeline (stuff in brackets is optional):
 	    
 	    cam [-> show on screen]
 	        \-> hardware encode h264 
 	                 \-> wrap in mpegts [-> write to disk ]
 	                                    \-> stream per as RTP over UDP
 	                                                 
-    */
-       	 	
+    */	
    g_snprintf(gstreamerPipelineString,
         (gulong) MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
             " appsrc is-live=TRUE name=streamViewer ! "                         
@@ -363,47 +339,13 @@ void* videoDisplay(void*) {
       	         gstreamerPipelineString,
     	         NULL);   
 	     
-	     
-	     
-
-                //" video/x-raw(memory:NVMM), format=(string)NV12 ! "
-                //" nvv4l2h264enc maxperf-enable=true ! "
-	                /* For 4k encoding performance testing 
-                   		(2k@120 Hz make problems, hence trying 4k@30,
-                        which is our target resolution)
-                    */
-                    //BOOLEAN doQuadrupleImage_debug = TRUE;
-                // nvcompositor \
-                  name=comp sink_0::xpos=0 sink_0::ypos=0 sink_0::width=1920 \
-                  sink_0::height=1080 
-
-                //            " video/x-bayer, format=(string)bggr ! "
-                 //           " bayer2rgb ! "
-                   //         " queue ! "
-
-	                /*
-	                    Hardware-accelerated, but hardcoded pipeline:
-
-	                    cam -> hardware encode h264 -> stream per as RTP over UDP
-
-	                pipeline = gst_parse_launch(
-	                    "appsrc is-live=TRUE name=streamViewer ! "
-                            " queue ! "
-                            " nvvidconv ! "
-                            " video/x-raw(memory:NVMM), format=(string)NV12 ! "
-                            " nvv4l2h264enc ! "
-                            " h264parse ! "
-                            " queue ! "
-                            " rtph264pay ! "
-                            " udpsink host=192.168.0.169 port=5001 sync=false ",
-	                     NULL);
-	                 */
-                //" video/xraw(memory:NVMM), width=(int)4096, height=(int)4096, format=(string)GRAY8 ! "
-                //" nvv4l2h264enc maxperf-enable=true ! "
-
-
 	if(!pipeline)
 		goto exit;
+		
+		
+		
+		
+		
 	bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
 	gst_bus_set_sync_handler(bus, (GstBusSyncHandler)bus_sync_handler,
 			pipeline,
@@ -412,48 +354,55 @@ void* videoDisplay(void*) {
 	
 	appsrc = gst_bin_get_by_name(GST_BIN(pipeline), "streamViewer");
 	
-	
 	scale = gst_bin_get_by_name(GST_BIN(pipeline), "scale");
 	
+	//{ prepare muxer for KLV buffer injection
+	mpegtsmux = gst_bin_get_by_name(GST_BIN(pipeline), "mpegtsmux");
+
+	//gst_element_request_pad
+	//}
+	
+	
+	
+	//{ "main loop"  
 	firsttime = getcurus();
 	prevtime = getcurus();
 	gstreamerPreviousTime = 0; // IIRC, when going to playing state, all times are zero
 	
-	
-	
 	while(acquire) {
 	
+	    // grab image
 		if(xiGetImage(handle, 5000, &image) != XI_OK)
+		{
 			break;
+		}
 			
-		if(render) {
-			unsigned long buffer_size = 
+		if(render) 
+		{
+			unsigned long raw_image_buffer_size = 
 			    image.width*image.height*(image.frm == XI_RAW8 ? 1 : 4);
 			
 			if(!image.padding_x) 
 			{
 				buffer = gst_buffer_new();
 				
-
 				gst_buffer_insert_memory(
 				    buffer, 
 				    -1, 
 				    gst_memory_new_wrapped(
 				        GST_MEMORY_FLAG_READONLY, 
 				        (guint8*)image.bp, 
-				        buffer_size, 
+				        raw_image_buffer_size, 
 				        0, 
-				        buffer_size, 
+				        raw_image_buffer_size, 
 				        0, 
 				        0)
 				);
-
-
 			} 
 			else 
 			{
                 printf("Warning: image is padded, mem copy is row-wise!\n");
-				buffer = gst_buffer_new_allocate(0, buffer_size, 0);
+				buffer = gst_buffer_new_allocate(0, raw_image_buffer_size, 0);
 				if(!buffer)
 					break;
 
@@ -473,49 +422,16 @@ void* videoDisplay(void*) {
 			}
 			
 			
-			//gst_pipeline_set_latency(GST_PIPELINE(pipeline), 600 * GST_MSECOND);
-			
-			GstClock * pipelineClock =
-              gst_pipeline_get_pipeline_clock (GST_PIPELINE(pipeline));
-            GstClockTime gstreamerCurrentTime =
-                gst_clock_get_time (pipelineClock);
-            gst_object_unref(pipelineClock);
-            GstClockTime gstreamerStartTime = GST_ELEMENT(pipeline)->start_time;
-            
-            GstClockTime gstreamerCurrentTimestamp =  gstreamerCurrentTime - gstreamerStartTime;          
-            /*
-             
-            GstClockTime gstreamerCurrentFrameDuration = gstreamerCurrentTimestamp - gstreamerPreviousTime;
-
-            //GST_BUFFER_TIMESTAMP(buffer) = gstreamerCurrentTimestamp; //  - 1* GST_MSECOND;
-            //GST_BUFFER_DURATION (buffer) = gstreamerCurrentFrameDuration;
-            GST_BUFFER_PTS(buffer) = gstreamerCurrentTimestamp; //  + 30 * GST_MSECOND;
-            //buffer->duration = gstreamerCurrentFrameDuration;
-            //buffer->offset = frames;
-            GST_BUFFER_OFFSET(buffer) = frames;
-            
-            gstreamerPreviousTime = gstreamerCurrentTimestamp;
-            
-			
-
-            
-            // works, but unstable due to systematic errors;
-			unsigned long target_FPS = (unsigned long) (1000/globalAppArgs.exposure_ms);
-			// Set its timestamp and duration
-            //GST_BUFFER_TIMESTAMP (buffer) = gst_util_uint64_scale (frames, GST_SECOND, target_FPS);
-            //GST_BUFFER_DURATION (buffer) = gst_util_uint64_scale (globalAppArgs.exposure_ms, GST_MSECOND, target_FPS);
-            //GST_BUFFER_DURATION (buffer) = GST_CLOCK_TIME_NONE;
-            */
-            //GST_BUFFER_DURATION (buffer) = globalAppArgs.exposure_ms * GST_MSECOND;
-			
-            GST_BUFFER_TIMESTAMP(buffer) = GST_CLOCK_TIME_NONE;
-			//works, but is not precise
-			GST_BUFFER_PTS(buffer) = (guint64) ( (guint64) frames * (guint64) globalAppArgs.exposure_ms * (guint64) GST_MSECOND);
-			// NOT works... maybe the pieline clokc is bad because the source is life and app source...
-			//GST_BUFFER_PTS(buffer) = gstreamerCurrentTimestamp;
 			 
+			 
+			//{ Timestamp stuff
+            GST_BUFFER_TIMESTAMP(buffer) = GST_CLOCK_TIME_NONE;
 			curtime = getcurus();
+			// This works: Presentation time stamp (PTS) from system time, 
+			//  NOT GstClock! TODO setup a working GstClock (PTP)
 			GST_BUFFER_PTS(buffer) = (guint64) (curtime - firsttime) * GST_USECOND ;
+			//}
+			
 			
 			
 			if(prev_width != image.width || 
@@ -627,6 +543,7 @@ void* videoDisplay(void*) {
 						NULL);
 						
 				g_object_set(G_OBJECT(scale), "caps", size_caps, NULL);
+				
 				gdk_threads_enter();
 				gtk_window_resize(GTK_WINDOW(videoWindow), width, height);
 				gdk_threads_leave();
@@ -641,27 +558,39 @@ void* videoDisplay(void*) {
 		}
 		
 		
+		
+		// statistics bookkeeping:
 		frames++;
 		if(image.nframe > lastframe)
+		{
 			lostframes += image.nframe - (lastframe + 1);
+		}
 		lastframe = image.nframe;
 		curtime = getcurus();
-		if(curtime - prevtime > 1000000) {
+		
+		// update presentation of statistics each second:
+		if(curtime - prevtime > 1000000) 
+		{
 			snprintf(
-			    title, 
+			    statistics_string, 
 			    256, 
 			    "Acquisition [ captured: %lu, skipped: %lu, fps: %.2f ]", 
 			    frames, 
 			    lostframes, 
 			    1000000.0 * (frames - prevframes) / (curtime - prevtime)
 			);
-			gtk_window_set_title(GTK_WINDOW(videoWindow), title);
+			gtk_window_set_title(GTK_WINDOW(videoWindow), statistics_string);
 			
 			prevframes = frames;
 			prevtime = curtime;
 		}
+		
 	}
+    //} end "main loop"
 	
+	
+	
+    //{ cleanup	
 	if(caps)
 		gst_caps_unref(caps);
 	if(size_caps)
@@ -669,6 +598,7 @@ void* videoDisplay(void*) {
 	gst_app_src_end_of_stream(GST_APP_SRC(appsrc));
 	gst_element_set_state(pipeline, GST_STATE_NULL);
 	gst_object_unref(GST_OBJECT(pipeline));	
+	
 exit:
 	gdk_threads_enter();
 	gtk_widget_destroy(videoWindow);
@@ -680,8 +610,13 @@ exit:
 	handle = INVALID_HANDLE_VALUE;
 	videoThread = 0;
 	gdk_threads_leave();
+	//} end cleanup	
+	
 	return 0;
 }
+
+
+
 
 struct ctrl_window {
     GtkWidget *window, 
