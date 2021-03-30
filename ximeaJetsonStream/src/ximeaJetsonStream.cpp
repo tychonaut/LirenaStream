@@ -24,6 +24,9 @@
 #include <stdint.h>   // For 'uint64_t'
 #include <endian.h>   // htobe64  be64toh (host to big endian 64)
 
+#define KLV_KEY_SIZE_BYTES     8
+#define KLV_LENGTH_SIZE_BYTES  8
+
 // don't know if low keys are reserved or forbidden or sth...
 #define KLV_KEY_OFFSET 0
 enum HOMEBREW_KLV_keys
@@ -46,6 +49,35 @@ enum HOMEBREW_KLV_keys
     
     KLV_KEY_num_keys = 11
 };
+
+// Converts relevant values to big endian and writes a KLV triple
+// return pointer points at the byte right after the area 
+//  the func has written to: 
+//  valuePtr + KLV_KEY_SIZE_BYTES + KLV_LENGTH_SIZE_BYTES + len_host
+guint8 * 
+write_homebrew_KLV_item(
+    guint8 * klv_buffer,
+    uint64_t key_host,
+    uint64_t len_host, 
+    guint8 const * value_ptr)
+{   
+    uint64_t key_be = htobe64(key_host);
+    memcpy(klv_buffer, &key_be, KLV_KEY_SIZE_BYTES);
+    klv_buffer += KLV_KEY_SIZE_BYTES;
+            
+    uint64_t len_be = htobe64(len_host);
+    memcpy(klv_buffer, &len_be, KLV_LENGTH_SIZE_BYTES);
+    klv_buffer += KLV_LENGTH_SIZE_BYTES; 
+            
+   memcpy(klv_buffer, value_ptr, len_host);
+   klv_buffer += len_host;
+   
+   return klv_buffer;
+}
+
+
+
+
 // ---------------------------------------------------------------------------
 //} KLV experiments
 
@@ -208,17 +240,23 @@ gboolean close_cb(GtkWidget*, GdkEvent*, gpointer quit)
 void* videoDisplay(void*) 
 {	
 	GstElement *pipeline = 0;
-	GstElement *appsrc = 0;
+	GstElement *appsrc_video = 0;
+	GstElement *appsrc_klv = 0;	
 	GstElement *scale_element = 0;
-	GstElement *mpegtsmux = 0;
+	//GstElement *mpegtsmux = 0;
+
+	GstBus *bus = 0;
+	
+	GstBuffer *video_frame_GstBuffer = 0;
+	GstBuffer *klv_frame_GstBuffer = 0;
+	
+	GstCaps *appsrc_video_caps = 0;
+	GstCaps *size_caps = 0;
+    //GstCaps *appsrc_klv_caps = 0;
 	
 	GstFlowReturn ret;
-	GstBuffer *buffer = 0;
-	GstBus *bus = 0;
-	GstCaps *appsrc_caps = 0;
-	GstCaps *size_caps = 0;
-    GstCaps *klv_caps = 0;
-	
+
+
 	int max_width, max_height;
 	int prev_width = -1;
 	int prev_height = -1;
@@ -292,6 +330,7 @@ void* videoDisplay(void*)
     {
         g_snprintf(gstreamerForkString_raw_to_show_and_enc,
             (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+            "%s",
             " tee name=fork_raw_to_show_and_enc "
             ""
             " fork_raw_to_show_and_enc. ! "
@@ -302,8 +341,7 @@ void* videoDisplay(void*)
             " xvimagesink "
             ""
             " fork_raw_to_show_and_enc. ! "
-            ,
-            "");
+        );
     }
     
     if(globalAppArgs.output_file)
@@ -333,12 +371,17 @@ void* videoDisplay(void*)
 	    
 	    cam [-> show on screen]
 	        \-> hardware encode h264 
-	                 \-> wrap in mpegts [-> write to disk ]
-	                                    \-> stream per as RTP over UDP
-	                                                 
+	                 \ 
+	                  >   wrap in mpegts [-> write to disk ]
+	    klv ---------/                   \-> stream per as RTP over UDP                                                
     */	
    g_snprintf(gstreamerPipelineString,
         (gulong) MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
+         /*   " appsrc is-live=TRUE name=klvSrc ! "
+            "  meta/x-klv ! " //, parsed=true ! "
+            //" queue ! "
+            " mp2ts_muxer. "
+         */   ""
             " appsrc is-live=TRUE name=streamViewer ! "                         
 	        "   video/x-bayer ! "
             " bayer2rgb ! "
@@ -349,6 +392,8 @@ void* videoDisplay(void*)
             " nvvidconv ! "
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
             " h264parse !" // disable-passthrough=true ! "
+            " mp2ts_muxer. "
+            ""
             " mpegtsmux name=mp2ts_muxer ! "
             " tsparse ! " //set-timestamps=true ! " // pcr-pid=-1 TODO what does set-timestamps=true do?
             " queue max-size-time=30000000000 max-size-bytes=0 max-size-buffers=0 ! "
@@ -384,36 +429,10 @@ void* videoDisplay(void*)
 			NULL);
 	gst_object_unref(bus);
 	
-	appsrc = gst_bin_get_by_name(GST_BIN(pipeline), "streamViewer");
+	appsrc_video = gst_bin_get_by_name(GST_BIN(pipeline), "streamViewer");
+	appsrc_klv = gst_bin_get_by_name(GST_BIN(pipeline), "klvSrc");
 	
 	scale_element = gst_bin_get_by_name(GST_BIN(pipeline), "scale_element");
-	
-	
-	//-------------------------------------------------------------------------
-	//{ prepare muxer for KLV buffer injection
-	mpegtsmux = gst_bin_get_by_name(GST_BIN(pipeline), "mpegtsmux");
-
-    //klv_caps
-    
-    
-	//gst_element_request_pad
-	
-	/*
-				if(size_caps)
-				{
-					gst_caps_unref(size_caps);
-				}
-				
-				size_caps = 
-				    gst_caps_new_simple(
-						"video/x-raw",
-						"width", G_TYPE_INT, width, 
-						"height", G_TYPE_INT, height, 
-						NULL);
-						
-				g_object_set(G_OBJECT(scale_element), "caps", size_caps, NULL);
-	*/
-	//} -----------------------------------------------------------------------
 	
 	
 	
@@ -429,6 +448,16 @@ void* videoDisplay(void*)
 		{
 			break;
 		}
+		
+		//{ record timestamp of frame capture
+		// The following works: Presentation time stamp (PTS) 
+		//  from SYSTEM time, NOT GstClock! 
+		// TODO setup a working GstClock (PTP)
+		// usage: 	GST_BUFFER_PTS(myBuffer) = frame_capture_PTS;
+		curtime = getcurus();
+		guint64 frame_capture_PTS = (guint64) (curtime - firsttime) * GST_USECOND ;
+		//}
+		
 			
 		if(render) 
 		{
@@ -437,10 +466,10 @@ void* videoDisplay(void*)
 			
 			if(!image.padding_x) 
 			{
-				buffer = gst_buffer_new();
+				video_frame_GstBuffer = gst_buffer_new();
 				
 				gst_buffer_insert_memory(
-				    buffer, 
+				    video_frame_GstBuffer, 
 				    -1, 
 				    gst_memory_new_wrapped(
 				        GST_MEMORY_FLAG_READONLY, 
@@ -455,14 +484,14 @@ void* videoDisplay(void*)
 			else 
 			{
                 printf("Warning: image is padded, mem copy is row-wise!\n");
-				buffer = gst_buffer_new_allocate(0, raw_image_buffer_size, 0);
-				if(!buffer)
+				video_frame_GstBuffer = gst_buffer_new_allocate(0, raw_image_buffer_size, 0);
+				if(!video_frame_GstBuffer)
 					break;
 
-				for(int i = 0; i < image.height; i++)
+				for(guint i = 0; i < image.height; i++)
 				{
 					gst_buffer_fill(
-					        buffer,
+					        video_frame_GstBuffer,
 							i * image.width * (image.frm == XI_RAW8 ? 1 : 4),
 							(guint8*)image.bp
 							+
@@ -476,29 +505,20 @@ void* videoDisplay(void*)
 			
 			
 			 
-			 
-			//{ Timestamp stuff -----------------------------------------------
-            GST_BUFFER_TIMESTAMP(buffer) = GST_CLOCK_TIME_NONE;
-			curtime = getcurus();
-			// This works: Presentation time stamp (PTS) from system time, 
-			//  NOT GstClock! TODO setup a working GstClock (PTP)
-			GST_BUFFER_PTS(buffer) = (guint64) (curtime - firsttime) * GST_USECOND ;
-			//} ---------------------------------------------------------------
 			
 			
-			
-			if(prev_width != image.width || 
-		        prev_height != image.height ||
+			if( (guint)prev_width  != image.width || 
+		        (guint)prev_height != image.height ||
 			    prev_format != image.frm) 
 			{
-				if(appsrc_caps)
-					gst_caps_unref(appsrc_caps);
+				if(appsrc_video_caps)
+					gst_caps_unref(appsrc_video_caps);
 				
 				/*
 				printf("DEBUG: BGRx from debayering;\n");
 				int wid_half= image.width/2;
 				int height_half= image.height/2;
-			    appsrc_caps = gst_caps_new_simple(
+			    appsrc_video_caps = gst_caps_new_simple(
 							"video/x-raw",
 							"format", G_TYPE_STRING, "BGRx",
 							"bpp", G_TYPE_INT, 32,
@@ -520,7 +540,7 @@ void* videoDisplay(void*)
 				{   
 				    /* old raw stuff w/o debayering
 				    printf("DEBUG: GRAY8\n");
-					appsrc_caps = gst_caps_new_simple(
+					appsrc_video_caps = gst_caps_new_simple(
 							"video/x-raw",
 							"format", G_TYPE_STRING, "GRAY8",
 							"bpp", G_TYPE_INT, 8,
@@ -532,7 +552,7 @@ void* videoDisplay(void*)
 					*/		
 					
 					printf("DEBUG: Appsrc has bayer caps!;\n");
-					appsrc_caps = gst_caps_new_simple(
+					appsrc_video_caps = gst_caps_new_simple(
 							"video/x-bayer",
 							"format", G_TYPE_STRING, "bggr",
 							"bpp", G_TYPE_INT, 8,
@@ -547,7 +567,7 @@ void* videoDisplay(void*)
 				else if(image.frm == XI_RGB32)
 				{
 				    printf("DEBUG: RGB32\n");
-					appsrc_caps = gst_caps_new_simple(
+					appsrc_video_caps = gst_caps_new_simple(
 							"video/x-raw",
 							"format", G_TYPE_STRING, "BGRx",
 							"bpp", G_TYPE_INT, 32,
@@ -570,7 +590,7 @@ void* videoDisplay(void*)
 				
 				
 				gst_element_set_state(pipeline, GST_STATE_PAUSED);
-				gst_app_src_set_caps(GST_APP_SRC(appsrc), appsrc_caps);
+				gst_app_src_set_caps(GST_APP_SRC(appsrc_video), appsrc_video_caps);
 				gst_element_set_state(pipeline, GST_STATE_PLAYING);
 				prev_width = image.width;
 				prev_height = image.height;
@@ -603,11 +623,110 @@ void* videoDisplay(void*)
 			}
 			
 			
+	        // Timestamp stuff 
+			// this does not seem important, but PTS does... 0_o
+            GST_BUFFER_TIMESTAMP(video_frame_GstBuffer) = GST_CLOCK_TIME_NONE;
+			GST_BUFFER_PTS(video_frame_GstBuffer) = frame_capture_PTS;
 			
-			ret = gst_app_src_push_buffer(GST_APP_SRC(appsrc), buffer);
+			// push buffer into gstreamer pipeline
+			ret = gst_app_src_push_buffer(GST_APP_SRC(appsrc_video), video_frame_GstBuffer);
 			
-			if(ret != GST_FLOW_OK)
+		    if(ret != GST_FLOW_OK)
+			{
 				break;
+			}
+			
+			
+			
+			/*
+			//-----------------------------------------------------------------
+        	//{ KLV buffer injection
+	        
+            // hundred thousand bytes
+            #define KLV_BUFFER_MAX_SIZE 100000            
+            guint8 klv_data[KLV_BUFFER_MAX_SIZE];
+            memset(klv_data, 0, KLV_BUFFER_MAX_SIZE);
+
+            guint8 * klv_data_end_ptr = &klv_data[0];
+
+            // Write string  "0123456789ABCDEF"
+            gchar const * test16byteString   = "0123456789ABCDEF";
+            klv_data_end_ptr = write_homebrew_KLV_item(
+                klv_data_end_ptr, // guint8 * klv_buffer,
+                KLV_KEY_string, // uint64_t key_host,
+                strlen(test16byteString), // uint64_t len_host, 
+                (guint8 const *) test16byteString // guint8 * value_ptr
+            );
+           
+            // Write frame count KLV_KEY_image_frame_number
+            uint64_t value_be = htobe64((uint64_t)frames);
+            klv_data_end_ptr = write_homebrew_KLV_item(
+                klv_data_end_ptr, // guint8 * klv_buffer,
+                KLV_KEY_image_frame_number, // uint64_t key_host,
+                sizeof(uint64_t), // uint64_t len_host, 
+                (guint8 const *) &value_be // guint8 * value_ptr
+            );
+            
+            // Write frame timestamp KLV_KEY_image_capture_time_stamp
+            value_be = htobe64((uint64_t)frame_capture_PTS);
+            klv_data_end_ptr = write_homebrew_KLV_item(
+                klv_data_end_ptr, // guint8 * klv_buffer,
+                KLV_KEY_image_capture_time_stamp, // uint64_t key_host,
+                sizeof(uint64_t), // uint64_t len_host, 
+                (guint8 const *) &value_be // guint8 * value_ptr
+            );
+            
+
+            // Write string "!frame meta end!"
+            gchar const * frameMetaEndString = "!frame meta end!";
+            klv_data_end_ptr = write_homebrew_KLV_item(
+                klv_data_end_ptr, // guint8 * klv_buffer,
+                KLV_KEY_string, // uint64_t key_host,
+                strlen(frameMetaEndString), // uint64_t len_host, 
+                (guint8 const *) frameMetaEndString // guint8 * value_ptr
+            );
+
+                   
+            guint klvBufferSize = klv_data_end_ptr - (&klv_data[0]);
+            
+         
+            // make empty buffer 
+            klv_frame_GstBuffer = gst_buffer_new();
+
+            // alloc memory for buffer
+            GstMemory *gstMem = gst_allocator_alloc (NULL, klvBufferSize, NULL);
+            
+            // add the buffer
+            gst_buffer_append_memory (klv_frame_GstBuffer, gstMem);
+            
+            // get WRITE access to the memory and fill with our KLV data 
+            GstMapInfo gstInfo;
+            gst_buffer_map (klv_frame_GstBuffer, &gstInfo, GST_MAP_WRITE);
+           
+            //do the writing
+            memcpy (gstInfo.data, klv_data, gstInfo.size);
+            
+            gst_buffer_unmap (klv_frame_GstBuffer, &gstInfo);
+
+				
+	        // Timestamp stuff onto KLV buffer itself to get associated 
+	        // with video buffer:
+            //GST_BUFFER_TIMESTAMP(klv_frame_GstBuffer) = GST_CLOCK_TIME_NONE;
+			//GST_BUFFER_PTS(klv_frame_GstBuffer) = frame_capture_PTS;
+
+            // This function takes ownership of the buffer. so no unref!
+			ret = gst_app_src_push_buffer(
+			  GST_APP_SRC(appsrc_klv), 
+			  klv_frame_GstBuffer);
+
+			if(ret != GST_FLOW_OK)
+			{
+				break;
+			}
+			
+			*/
+        	//} ---------------------------------------------------------------
+							
 		}
 		
 		
@@ -644,11 +763,11 @@ void* videoDisplay(void*)
 	
 	
     //{ cleanup	
-	if(appsrc_caps)
-		gst_caps_unref(appsrc_caps);
+	if(appsrc_video_caps)
+		gst_caps_unref(appsrc_video_caps);
 	if(size_caps)
 		gst_caps_unref(size_caps);
-	gst_app_src_end_of_stream(GST_APP_SRC(appsrc));
+	gst_app_src_end_of_stream(GST_APP_SRC(appsrc_video));
 	gst_element_set_state(pipeline, GST_STATE_NULL);
 	gst_object_unref(GST_OBJECT(pipeline));	
 	
