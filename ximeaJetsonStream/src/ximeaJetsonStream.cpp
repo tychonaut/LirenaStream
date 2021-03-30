@@ -377,12 +377,12 @@ void* videoDisplay(void*)
     */	
    g_snprintf(gstreamerPipelineString,
         (gulong) MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
-         /*   " appsrc is-live=TRUE name=klvSrc ! "
-            "  meta/x-klv ! " //, parsed=true ! "
+            " appsrc format=GST_FORMAT_TIME is-live=TRUE name=klvSrc ! "
+            "  meta/x-klv, parsed=true ! "
             //" queue ! "
             " mp2ts_muxer. "
-         */   ""
-            " appsrc is-live=TRUE name=streamViewer ! "                         
+            ""
+            " appsrc format=GST_FORMAT_TIME is-live=TRUE name=streamViewer ! "                         
 	        "   video/x-bayer ! "
             " bayer2rgb ! "
             "   video/x-raw, format=(string)BGRx ! "
@@ -623,10 +623,45 @@ void* videoDisplay(void*)
 			}
 			
 			
-	        // Timestamp stuff 
-			// this does not seem important, but PTS does... 0_o
-            GST_BUFFER_TIMESTAMP(video_frame_GstBuffer) = GST_CLOCK_TIME_NONE;
-			GST_BUFFER_PTS(video_frame_GstBuffer) = frame_capture_PTS;
+			//Clock stuff:
+			//https://stackoverflow.com/questions/34294755/mux-klv-data-with-h264-by-mpegtsmux
+			GstClock *clock = nullptr;
+            GstClockTime abs_time, base_time;
+
+            //TODO try with appscr instead of pipeline
+            GST_OBJECT_LOCK (pipeline);
+                // TODO try gst_pipeline_get_pipeline_clock
+                clock = GST_ELEMENT_CLOCK (pipeline);
+                if(!clock)
+                {
+                    GST_ERROR("%s","NO CLOCK");
+                    exit(1);
+                }
+                base_time = GST_ELEMENT (pipeline)->base_time;
+                gst_object_ref (clock);
+                    abs_time = gst_clock_get_time (clock);
+                gst_object_unref (clock);
+            GST_OBJECT_UNLOCK (pipeline);
+                
+            guint64 myPTS_timestamp = abs_time - base_time;
+            GST_DEBUG("myPTS_timestamp: %lu",myPTS_timestamp);
+            
+            
+            guint64 myDuration = gst_util_uint64_scale_int (
+                                      1, 30 * GST_MSECOND, 1);
+
+			
+			
+            GST_BUFFER_PTS (video_frame_GstBuffer) = myPTS_timestamp;
+            //GST_BUFFER_DURATION (video_frame_GstBuffer) = myDuration;
+			
+			
+	        //// Timestamp stuff, based on system clock, NOT gst clock! works, but only without KLV:
+			//// this does not seem important, but PTS does... 0_o
+            //GST_BUFFER_TIMESTAMP(video_frame_GstBuffer) = GST_CLOCK_TIME_NONE;
+			//GST_BUFFER_PTS(video_frame_GstBuffer) = frame_capture_PTS;
+			
+			
 			
 			// push buffer into gstreamer pipeline
 			ret = gst_app_src_push_buffer(GST_APP_SRC(appsrc_video), video_frame_GstBuffer);
@@ -638,7 +673,7 @@ void* videoDisplay(void*)
 			
 			
 			
-			/*
+			
 			//-----------------------------------------------------------------
         	//{ KLV buffer injection
 	        
@@ -713,6 +748,10 @@ void* videoDisplay(void*)
 	        // with video buffer:
             //GST_BUFFER_TIMESTAMP(klv_frame_GstBuffer) = GST_CLOCK_TIME_NONE;
 			//GST_BUFFER_PTS(klv_frame_GstBuffer) = frame_capture_PTS;
+			
+			GST_BUFFER_PTS (klv_frame_GstBuffer) = myPTS_timestamp;
+            //GST_BUFFER_DURATION (klv_frame_GstBuffer) = myDuration;
+			
 
             // This function takes ownership of the buffer. so no unref!
 			ret = gst_app_src_push_buffer(
@@ -724,7 +763,7 @@ void* videoDisplay(void*)
 				break;
 			}
 			
-			*/
+			
         	//} ---------------------------------------------------------------
 							
 		}
