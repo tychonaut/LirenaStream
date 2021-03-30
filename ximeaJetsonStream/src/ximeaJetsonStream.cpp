@@ -264,6 +264,9 @@ void* videoDisplay(void*) {
     gchar gstreamerPipelineString [MAX_GSTREAMER_PIPELINE_STRING_LENGTH];
     gchar gstreamerForkString_enc_to_disk_and_UDP[
       MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
+    gchar gstreamerForkString_raw_to_show_and_enc[
+      MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH]; 
+      
     
     if(globalAppArgs.output_file)
     {
@@ -295,31 +298,49 @@ void* videoDisplay(void*) {
                    "%s","");
     }
     
-    
     if(globalAppArgs.doLocalDisplay)
     {
-	    /*
-	        cam -> show on screen
-	            \-> hardware encode h264 -> stream per as RTP over UDP
-       	*/
-       	 	
-       	g_snprintf(gstreamerPipelineString,
-            (gulong) MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
-            " appsrc is-live=TRUE name=streamViewer ! "                         
-	        "   video/x-bayer ! "
-            " bayer2rgb ! "
-            "   video/x-raw, format=(string)BGRx ! "
-            " videoconvert ! "
-	        " tee name=forkRaw2ShowNEnc "
+        g_snprintf(gstreamerForkString_raw_to_show_and_enc,
+            (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+            " tee name=fork_raw_to_show_and_enc "
             ""
-            " forkRaw2ShowNEnc. ! "
+            " fork_raw_to_show_and_enc. ! "
             " queue ! "
             " videoscale add-borders=TRUE ! "
             " capsfilter name=scale ! "
             VIDEOCONVERT " ! " 
             VIDEOSINK
             ""
-            " forkRaw2ShowNEnc. ! "
+            " fork_raw_to_show_and_enc. ! "
+            ,
+            "");
+    }
+    else
+    {
+        //empty string:
+        g_snprintf(gstreamerForkString_raw_to_show_and_enc,
+                   (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+                   "%s","");
+    }
+    
+	/*
+	    Full pipeline would look like:
+	    
+	    cam [-> show on screen]
+	        \-> hardware encode h264 
+	                 \-> wrap in mpegts [-> write to disk ]
+	                                    \-> stream per as RTP over UDP
+	                                                 
+    */
+       	 	
+   g_snprintf(gstreamerPipelineString,
+        (gulong) MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
+            " appsrc is-live=TRUE name=streamViewer ! "                         
+	        "   video/x-bayer ! "
+            " bayer2rgb ! "
+            "   video/x-raw, format=(string)BGRx ! "
+            " videoconvert ! "
+	        " %s "
             " queue ! "
             " nvvidconv ! "
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
@@ -331,43 +352,12 @@ void* videoDisplay(void*) {
             "   host=%s"
             "   port=%s"
             "   sync=false "
-            ,
-            gstreamerForkString_enc_to_disk_and_UDP,
-            globalAppArgs.IP,
-            globalAppArgs.port 
-            );
-	}
-	else
-	{
-	    // no local displaying, only streaming
-	   	    
-	   	/*
-	        cam -> hardware encode h264 -> stream per as RTP over UDP
-       	*/	
-       	g_snprintf (gstreamerPipelineString,
-            (gulong) MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
-            " appsrc is-live=TRUE name=streamViewer ! "                         
-	        "   video/x-bayer ! "
-            " bayer2rgb ! "
-            "   video/x-raw, format=(string)BGRx ! "
-            " videoconvert ! "
-            " queue ! "
-            " nvvidconv ! "
-            " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
-            " h264parse ! " // disable-passthrough=true ! "
-            " %s " // optional fork to inject dump-to-disk
-            " queue ! "
-            " rtph264pay ! "
-            " udpsink "
-            "   host=%s"
-            "   port=%s"
-            "   sync=false "
-            ,
-            gstreamerForkString_enc_to_disk_and_UDP,
-            globalAppArgs.IP,
-            globalAppArgs.port 
-            );	
-	}
+        ,
+        gstreamerForkString_raw_to_show_and_enc,
+        gstreamerForkString_enc_to_disk_and_UDP,
+        globalAppArgs.IP,
+        globalAppArgs.port 
+    );
 	     
    	GST_DEBUG("HERE MY PIPELINE: %s",gstreamerPipelineString);
        	
