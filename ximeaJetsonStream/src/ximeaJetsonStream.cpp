@@ -262,42 +262,19 @@ void* videoDisplay(void*) {
    	#define MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH 1000
    	
     gchar gstreamerPipelineString [MAX_GSTREAMER_PIPELINE_STRING_LENGTH];
-    gchar gstreamerForkString_enc_to_disk_and_UDP[
-      MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
     gchar gstreamerForkString_raw_to_show_and_enc[
       MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH]; 
+    gchar gstreamerForkString_enc_to_disk_and_UDP[
+      MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
       
-    
-    if(globalAppArgs.output_file)
-    {
-        /*
-          Inject dump-to-disk:
-          [encoded stream incoming] -> write to disk
-	                                \-> [to stream as RTP over UDP]
-        */
-        g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
-            (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-            // TODO maybe add " h264parse disable-passthrough=true ! "
-            " tee name=fork_enc_to_disk_and_UDP " 
-            ""
-            " fork_enc_to_disk_and_UDP. ! "
-            " queue ! "
-            " mpegtsmux name=mp2ts_muxer ! "
-            " tsparse ! " //set-timestamps=true ! " // pcr-pid=-1 TODO what does set-timestamps=true do?
-            " queue max-size-time=30000000000 max-size-bytes=0 max-size-buffers=0 ! "
-            " filesink location=%s "
-            ""
-            " fork_enc_to_disk_and_UDP. ! ",
-            globalAppArgs.output_file);
-    }
-    else
-    {
-        //empty string:
-        g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
-                   (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-                   "%s","");
-    }
-    
+    // init snippets to empty string:
+    g_snprintf(gstreamerForkString_raw_to_show_and_enc,
+               (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+                "%s","");     
+    g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
+               (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+                "%s",""); 
+      
     if(globalAppArgs.doLocalDisplay)
     {
         g_snprintf(gstreamerForkString_raw_to_show_and_enc,
@@ -315,13 +292,32 @@ void* videoDisplay(void*) {
             ,
             "");
     }
-    else
+    
+    if(globalAppArgs.output_file)
     {
-        //empty string:
-        g_snprintf(gstreamerForkString_raw_to_show_and_enc,
-                   (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-                   "%s","");
+        /*
+          Inject dump-to-disk:
+          [encoded stream incoming] -> write to disk
+	                                \-> [to stream as RTP over UDP]
+        */
+        g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
+            (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+            // TODO maybe add " h264parse disable-passthrough=true ! "
+            " tee name=fork_enc_to_disk_and_UDP " 
+            ""
+            " fork_enc_to_disk_and_UDP. ! "
+            " queue ! "
+            " filesink location=%s "
+            ""
+            " fork_enc_to_disk_and_UDP. ! "
+            " queue ! "
+            ,
+            globalAppArgs.output_file);
     }
+
+    
+
+
     
 	/*
 	    Full pipeline would look like:
@@ -340,14 +336,16 @@ void* videoDisplay(void*) {
             " bayer2rgb ! "
             "   video/x-raw, format=(string)BGRx ! "
             " videoconvert ! "
-	        " %s "
+	        " %s "          // optional fork to local display
             " queue ! "
             " nvvidconv ! "
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
             " h264parse !" // disable-passthrough=true ! "
-            " %s " // optional fork to inject dump-to-disk
-            " queue ! "
-            " rtph264pay ! "
+            " mpegtsmux name=mp2ts_muxer ! "
+            " tsparse ! " //set-timestamps=true ! " // pcr-pid=-1 TODO what does set-timestamps=true do?
+            " queue max-size-time=30000000000 max-size-bytes=0 max-size-buffers=0 ! "
+            " %s "          // optional fork to dump-to-disk
+            " rtpmp2tpay ! " //" rtph264pay ! "
             " udpsink "
             "   host=%s"
             "   port=%s"
