@@ -165,3 +165,116 @@ gst-launch-1.0 filesrc location=dummy_h264.ts !
 
 
 
+gst-launch-1.0 -v -m \
+  udpsrc port=5001 caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
+  rtpjitterbuffer latency=50 ! \
+  rtpmp2tdepay ! \
+  tsdemux name=myTsDemux  \
+  \
+  myTsDemux. ! \
+  h264parse ! \
+  tee name=fork_h264_to_show_and_mp2ts   \
+  \
+  fork_h264_to_show_and_mp2ts. ! \
+  queue !    \
+  avdec_h264 !   \
+  videoconvert !   \
+  xvimagesink sync=false   \
+  \
+  fork_h264_to_show_and_mp2ts. ! \
+  queue ! \
+  mpegtsmux name=mp2ts_muxer !  \
+  filesink location=./udp_rtpmp2tdepay_klv1.mpg 
+
+
+
+
+################################################################################
+## new stuff after C- based KLV injection works (at least no freeze) (2021/03/31)
+
+
+
+
+# Receive mp2ts per udp, dump directly to disk and show on screen:
+# works, though playback of mpg file that contains KLV must be with VLC 
+# (playbin cannot decode/ignore it for some reason)
+gst-launch-1.0 -v -m \
+  udpsrc port=5001 caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
+  rtpjitterbuffer latency=50 ! \
+  rtpmp2tdepay ! \
+  tee name=fork_mp2ts_to_disk_and_show \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  filesink location=./udp_rtpmp2tdepay_klv4.mpg \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  tsdemux name=myTsDemux  \
+  \
+  myTsDemux. ! \
+  h264parse ! \
+  queue !    \
+  avdec_h264 !   \
+  videoconvert !   \
+  xvimagesink sync=false  
+
+
+
+
+# extract KLV data from previously dumped mp2ts video+KLV-file to KLV-file
+# works
+gst-launch-1.0 -vm  \
+  filesrc location=$(pwd)/udp_rtpmp2tdepay_klv2.mpg ! \
+  tsdemux name=mydemuxer \
+  \
+  mydemuxer. ! \
+    meta/x-klv,parsed=true ! \
+  filesink location=./klvOnly_fromLocalMpgFile1.klv
+
+
+
+# replay only video part 
+# from previously dumped mp2ts video+KLV-file 
+# works, though xvimagesink's  "sync=false" makes too fast playback,
+#        and in the end, the error:
+# 0:00:04.074952454 98071 0x7f9fb00d0600 ERROR                  libav :0:: negative number of zero coeffs at 8 94
+# 0:00:04.075006095 98071 0x7f9fb00d0600 ERROR                  libav :0:: error while decoding MB 8 94
+GST_DEBUG=2 \
+gst-launch-1.0 -vm  \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/udp_rtpmp2tdepay_klv3.mpg ! \
+  tsdemux name=mydemuxer \
+  \
+  mydemuxer. ! \
+    video/x-h264 ! \
+  h264parse ! \
+  queue !    \
+  avdec_h264 !   \
+  videoconvert !   \
+  xvimagesink 
+
+
+
+# replay video and extract KLV data 
+# from previously dumped mp2ts video+KLV-file to KLV-file
+# works, but  in the end, corupted stuff is reported:
+# 0:00:16.246408611 98634 0x7f0ce4002350 ERROR                  libav :0:: corrupted macroblock 7 96 (total_coeff=-1)
+# 0:00:16.246463961 98634 0x7f0ce4002350 ERROR                  libav :0:: error while decoding MB 7 96
+GST_DEBUG=2 \
+gst-launch-1.0 -vm  \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/udp_rtpmp2tdepay_klv4.mpg ! \
+  tsdemux name=mydemuxer \
+  \
+  mydemuxer. ! \
+    video/x-h264 ! \
+  h264parse ! \
+  queue !    \
+  avdec_h264 !   \
+  videoconvert !   \
+  xvimagesink \
+  \
+  mydemuxer. ! \
+    meta/x-klv,parsed=true ! \
+  queue ! \
+  filesink location=./klvOnly_fromLocalMpgFile4.klv
+
