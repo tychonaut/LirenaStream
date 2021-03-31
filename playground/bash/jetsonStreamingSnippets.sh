@@ -255,6 +255,40 @@ gst-launch-1.0 -vm  \
 
 
 
+
+
+
+# receive, show video, dump both video+klv to disk and also klv-only
+# works
+gst-launch-1.0 -v -m \
+  udpsrc port=5001 caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
+  rtpjitterbuffer latency=50 ! \
+  rtpmp2tdepay ! \
+  tee name=fork_mp2ts_to_disk_and_show \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  filesink location=./udp_rtpmp2tdepay_klv10.mpg \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  tsdemux name=myTsDemux  \
+  \
+  myTsDemux. ! \
+    video/x-h264 ! \
+  h264parse ! \
+  queue !    \
+  avdec_h264 !   \
+  videoconvert !   \
+  xvimagesink sync=false  \
+  \
+  myTsDemux. ! \
+    meta/x-klv,parsed=true ! \
+  queue ! \
+  filesink location=./klvOnly_from_UDP_mp2ts_10.klv
+
+
+
 # replay video and extract KLV data 
 # from previously dumped mp2ts video+KLV-file to KLV-file
 # works, but  in the end, corupted stuff is reported:
@@ -262,7 +296,7 @@ gst-launch-1.0 -vm  \
 # 0:00:16.246463961 98634 0x7f0ce4002350 ERROR                  libav :0:: error while decoding MB 7 96
 GST_DEBUG=2 \
 gst-launch-1.0 -vm  \
-  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/udp_rtpmp2tdepay_klv4.mpg ! \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/udp_rtpmp2tdepay_klv10.mpg ! \
   tsdemux name=mydemuxer \
   \
   mydemuxer. ! \
@@ -276,5 +310,7 @@ gst-launch-1.0 -vm  \
   mydemuxer. ! \
     meta/x-klv,parsed=true ! \
   queue ! \
-  filesink location=./klvOnly_fromLocalMpgFile4.klv
+  filesink location=./klvOnly_fromDumpedLocalMp2ts_10.klv
+
+
 
