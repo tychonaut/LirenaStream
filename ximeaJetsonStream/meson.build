@@ -34,13 +34,18 @@ all_deps = [
 
 install_directory = get_option('install_directory')
 
+incdir = include_directories('include')
 
 
-exe_source_files = ['src/ximeaJetsonStream.cpp']
+exe_source_files = [
+  'src/ximeaJetsonStream.cpp',
+  'src/LirenaOptions.cpp',
+  'src/KLV_appsrc.cpp',
+  'src/StreamViewerGUI.cpp']
 
 executable('ximeaJetsonStream',
   exe_source_files,
   install : true,
-  dependencies : all_deps
+  dependencies : all_deps,
+  include_directories: incdir
 )
-

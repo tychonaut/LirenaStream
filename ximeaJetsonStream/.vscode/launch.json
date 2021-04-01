@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/builddir/ximeaJetsonStream",
-            "args": ["192.168.0.169", "5001", "--exposure=20", "--localdisplay"],
+            "args": ["192.168.0.169", "5001", "--exposure=25", "--localdisplay"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [{"name":"GST_DEBUG", "value":"0,appsrc:0,mpegtsmux:0"},
