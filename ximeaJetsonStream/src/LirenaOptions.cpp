@@ -34,8 +34,8 @@ parse_opt (int key, char *arg, struct argp_state *state)
 {
   // Get the input argument from argp_parse, which we
   //   know is a pointer to our arguments structure.
-  struct ApplicationArguments *myArgs = 
-    (struct ApplicationArguments *) state->input;
+  struct LirenaCamStreamConfig *myArgs = 
+    (struct LirenaCamStreamConfig *) state->input;
 
   switch (key)
     {
@@ -86,9 +86,9 @@ static struct argp argp = { options, parse_opt, args_doc, doc };
 
 
 
-ApplicationArguments parseArguments(int argc, char **argv)
+LirenaCamStreamConfig parseArguments(int argc, char **argv)
 {
-	ApplicationArguments ret;
+	LirenaCamStreamConfig ret;
    
     // Default values.
     ret.doLocalDisplay = false;

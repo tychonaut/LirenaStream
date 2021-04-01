@@ -26,6 +26,53 @@
 
 
 
+struct LirenaCamStreamControlWindow 
+{
+    GtkWidget *window, 
+
+        *boxmain, 
+        *boxgpi, 
+        *boxx, 
+        *boxy, 
+
+        *gpi1, 
+        *gpi2, 
+        *gpi3, 
+        *gpi4, 
+
+        *labelexp, 
+        *exp, 
+        *labelgain, 
+        *gain,
+
+        *labelx0, 
+        *x0, 
+        *labely0, 
+        *y0, 
+        *labelcx, 
+        *cx, 
+        *labelcy, 
+        *cy, 
+
+        *raw, 
+        *show, 
+        *run;
+};
+
+
+struct LirenaCamStreamLocalDisplay
+{
+	LirenaCamStreamControlWindow controlWindow;
+	
+	pthread_t videoThread;
+	guintptr window_handle;
+
+};
+
+
+
+
+
 
 // hack from Ximea as long as no good GstClock integrated...
 inline unsigned long getcurus() 
@@ -37,51 +84,29 @@ inline unsigned long getcurus()
 
 
 
-struct CamControlWindow 
-{
-    GtkWidget *window, 
-        *boxmain, 
-        *boxgpi, 
-        *boxx, 
-        *boxy, 
-        *gpi1, 
-        *gpi2, 
-        *gpi3, 
-        *gpi4, 
-        *labelexp, 
-        *exp, 
-        *labelgain, 
-        *gain, 
-        *labelx0, 
-        *x0, 
-        *labely0, 
-        *y0, 
-        *labelcx, 
-        *cx, 
-        *labelcy, 
-        *cy, 
-        *raw, 
-        *show, 
-        *run;
-};
+
+//TODO get rid of app state in this function -> diviede display and cam stuff!
+struct  LirenaCamStreamApp;
 
 
 
-void* videoDisplay(void*);
+//TODO get rid of app state in this function -> diviede display and cam stuff!
+void* videoDisplay(void* appVoidPtr);
 
 GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, gpointer);
 
-gboolean time_handler(CamControlWindow *ctrl);
+gboolean time_handler(LirenaCamStreamControlWindow *ctrl);
 
 void video_widget_realize_cb(GtkWidget* widget, gpointer);
 
-gboolean start_cb(CamControlWindow* ctrl);
+gboolean start_cb(LirenaCamStreamApp* appPtr);//(LirenaCamStreamControlWindow* ctrl);
+
 gboolean close_cb(GtkWidget*, GdkEvent*, gpointer quit);
 
-
-gboolean update_run(GtkToggleButton *run, CamControlWindow *ctrl);
+//TODO get rid of app state in this function -> diviede display and cam stuff!
+gboolean update_run(GtkToggleButton *run,  LirenaCamStreamApp* app);
 gboolean update_show(GtkToggleButton *show, gpointer);
-gboolean update_raw(GtkToggleButton *raw, CamControlWindow *ctrl);
+gboolean update_raw(GtkToggleButton *raw, LirenaCamStreamControlWindow *ctrl);
 
 gboolean update_gain(GtkAdjustment *adj, gpointer);
 gboolean update_exposure(GtkAdjustment *adj, gpointer);

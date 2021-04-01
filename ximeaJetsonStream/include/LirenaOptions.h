@@ -9,7 +9,7 @@
 #include <argp.h> // CLI arguments parsing
 
 
-struct ApplicationArguments
+struct LirenaCamStreamConfig
 {
   bool doLocalDisplay;
   //int silent, verbose;
@@ -22,7 +22,7 @@ struct ApplicationArguments
 };
 
 //{ forwards:
-ApplicationArguments parseArguments(int argc, char **argv);
+LirenaCamStreamConfig parseArguments(int argc, char **argv);
 //}
 
 

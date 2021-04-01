@@ -3,10 +3,10 @@
 
 #include "StreamViewerGUI.h"
 
-#include "KLV_appsrc.h"
+//#include "KLV_appsrc.h"
 
 //TODO change this mess
-extern ApplicationArguments globalAppArgs;
+//extern ApplicationArguments globalAppArgs;
 //----------------------------------------------------------------------------
 
 
