@@ -88,16 +88,18 @@ inline unsigned long getcurus()
 //TODO get rid of app state in this function -> diviede display and cam stuff!
 struct  LirenaCamStreamApp;
 
+struct LirenaCamera;
+
 
 
 //TODO get rid of app state in this function -> diviede display and cam stuff!
 void* videoDisplay(void* appVoidPtr);
 
-GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, gpointer);
+GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message,  LirenaCamera* cam); //gpointer)
 
-gboolean time_handler(LirenaCamStreamControlWindow *ctrl);
+gboolean time_handler(LirenaCamStreamApp* app);
 
-void video_widget_realize_cb(GtkWidget* widget, gpointer);
+void video_widget_realize_cb(GtkWidget* widget,  LirenaCamera* cam); //gpointer)
 
 gboolean start_cb(LirenaCamStreamApp* appPtr);//(LirenaCamStreamControlWindow* ctrl);
 
@@ -105,15 +107,15 @@ gboolean close_cb(GtkWidget*, GdkEvent*, gpointer quit);
 
 //TODO get rid of app state in this function -> diviede display and cam stuff!
 gboolean update_run(GtkToggleButton *run,  LirenaCamStreamApp* app);
-gboolean update_show(GtkToggleButton *show, gpointer);
-gboolean update_raw(GtkToggleButton *raw, LirenaCamStreamControlWindow *ctrl);
+gboolean update_show(GtkToggleButton *show,  LirenaCamera* cam); //gpointer)
+gboolean update_raw(GtkToggleButton *raw, LirenaCamStreamApp* appPtr);
 
-gboolean update_gain(GtkAdjustment *adj, gpointer);
-gboolean update_exposure(GtkAdjustment *adj, gpointer);
-gboolean update_cy(GtkAdjustment *adj, gpointer);
-gboolean update_cx(GtkAdjustment *adj, gpointer);
-gboolean update_y0(GtkAdjustment *adj, gpointer);
-gboolean update_x0(GtkAdjustment *adj, gpointer);
+gboolean update_gain(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
+gboolean update_exposure(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
+gboolean update_cy(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
+gboolean update_cx(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
+gboolean update_y0(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
+gboolean update_x0(GtkAdjustment *adj, LirenaCamera* cam);
 
 
 
