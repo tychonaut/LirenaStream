@@ -38,7 +38,9 @@ struct LirenaCamera
 {
 	HANDLE cameraHandle = INVALID_HANDLE_VALUE;
 
-	BOOLEAN acquire, quitting, render = TRUE;	
+	BOOLEAN acquire = TRUE;
+	BOOLEAN quitting = TRUE;
+	BOOLEAN doRender = TRUE;
 
 	int maxcx, maxcy, roix0, roiy0, roicx, roicy;
 };
@@ -111,7 +113,7 @@ LirenaCamStreamApp* lirena_camStreamApp_create(int argc, char **argv)
 	appPtr->camState.cameraHandle = INVALID_HANDLE_VALUE;
 
 	appPtr->camState.acquire = TRUE;
-	appPtr->camState.render = TRUE;
+	appPtr->camState.doRender = TRUE;
 	appPtr->camState.quitting = TRUE;
 
 	appPtr->config = parseArguments(argc, argv);
