@@ -1,7 +1,7 @@
 
-#include "LirenaOptions.h"
-#include "KLV_appsrc.h"
-#include "StreamViewerGUI.h"
+#include "LirenaConfig.h"
+#include "LirenaKLVappsrc.h"
+#include "LirenaCaptureDisplay.h"
 
 
 #include <sys/time.h>

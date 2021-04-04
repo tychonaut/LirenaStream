@@ -1,6 +1,6 @@
 
 
-#include "LirenaOptions.h"
+#include "LirenaConfig.h"
 
 
 

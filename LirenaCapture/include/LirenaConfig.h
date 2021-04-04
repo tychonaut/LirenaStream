@@ -1,8 +1,8 @@
 // Parse CLI options:
 // use global variable "globalAppArgs"
 
-#ifndef __LIRENA_OPTIONS_H__
-#define __LIRENA_OPTIONS_H__
+#ifndef __LIRENA_CONFIG_H__
+#define __LIRENA_CONFIG_H__
 
 
 #include <stdlib.h>
@@ -28,4 +28,4 @@ LirenaCamStreamConfig parseArguments(int argc, char **argv);
 
 
 
-#endif //__LIRENA_OPTIONS_H__
+#endif //__LIRENA_CONFIG_H__

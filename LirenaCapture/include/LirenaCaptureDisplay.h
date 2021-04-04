@@ -1,8 +1,8 @@
-#ifndef __STREAM_VIEWER_GUI_H__
-#define __STREAM_VIEWER_GUI_H__
+#ifndef __LIRENA_CAPTURE_DISPLAY_H__
+#define __LIRENA_CAPTURE_DISPLAY_H__
 
 
-#include "LirenaOptions.h"
+#include "LirenaConfig.h"
 
 #include <gtk/gtk.h>
 
@@ -119,4 +119,4 @@ gboolean update_x0(GtkAdjustment *adj, LirenaCamera* cam);
 
 
 
-#endif //__STREAM_VIEWER_GUI_H__
+#endif //__LIRENA_CAPTURE_DISPLAY_H__

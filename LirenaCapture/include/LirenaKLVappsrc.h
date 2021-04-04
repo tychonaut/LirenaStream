@@ -1,5 +1,5 @@
-#ifndef __KLV_APP_SRC_H__
-#define __KLV_APP_SRC_H__
+#ifndef __LIRENA_KLV_APP_SRC_H__
+#define __LIRENA_KLV_APP_SRC_H__
 
 
 #include <gst/app/gstappsrc.h>
@@ -62,4 +62,4 @@ write_KLV_item(
 
 
 
-#endif //__KLV_APP_SRC_H__
+#endif //__LIRENA_KLV_APP_SRC_H__
