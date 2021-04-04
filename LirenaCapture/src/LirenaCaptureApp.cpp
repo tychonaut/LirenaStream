@@ -310,9 +310,7 @@ void* videoDisplay(void* appVoidPtr)
 	
 	unsigned long curtime, prevtime;
     unsigned long firsttime = getcurus();
-    unsigned long gstreamerPreviousTime;
-    
-	
+    GstClockTime  gst_defaultClock_prevTime = 0;
 	
 	
 	XI_IMG_FORMAT prev_format = XI_RAW8;
@@ -431,18 +429,25 @@ void* videoDisplay(void* appVoidPtr)
             " queue ! "
             " nvvidconv ! "
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
-            " h264parse !" // disable-passthrough=true ! "
+            " h264parse  config-interval=-1 disable-passthrough=true ! "
             " mp2ts_muxer. "
             ""
-            " mpegtsmux name=mp2ts_muxer ! "
+            " mpegtsmux name=mp2ts_muxer alignment=0 ! "
             " tsparse ! " //set-timestamps=true ! " // pcr-pid=-1 TODO what does set-timestamps=true do?
             " queue max-size-time=30000000000 max-size-bytes=0 max-size-buffers=0 ! "
             " %s "          // optional fork to dump-to-disk
             " rtpmp2tpay ! " //" rtph264pay ! "
-            " udpsink "
-            "   host=%s"
-            "   port=%s"
-            "   sync=false "
+            
+            " rtpstreampay ! "
+            " tcpserversink "
+            //" udpsink "
+            "   sync-method=next-keyframe "
+            //"   ts-offset=100000000  "
+            //"   unit-format=GST_FORMAT_TIME "
+            //"   burst-format=GST_FORMAT_TIME "
+            "   host=%s "
+            "   port=%s "
+            //"   sync=false "
         ,
         gstreamerForkString_raw_to_show_and_enc,
         gstreamerForkString_enc_to_disk_and_UDP,
@@ -455,11 +460,13 @@ void* videoDisplay(void* appVoidPtr)
     pipeline = gst_parse_launch(
       	         gstreamerPipelineString,
     	         NULL);   
+	   
+	
 	     
 	if(!pipeline)
 		goto exit;
 		
-		
+ 
 		
 		
 		
@@ -479,7 +486,9 @@ void* videoDisplay(void* appVoidPtr)
 	//{ "main loop"  
 	firsttime = getcurus();
 	prevtime = getcurus();
-	gstreamerPreviousTime = 0; // IIRC, when going to playing state, all times are zero
+	
+    gst_defaultClock_prevTime = GST_ELEMENT (pipeline)->base_time;  
+
 	
 	while(acquire) {
 	
@@ -686,20 +695,16 @@ void* videoDisplay(void* appVoidPtr)
             guint64 myPTS_timestamp = abs_time - base_time;
             GST_DEBUG("myPTS_timestamp: %lu",myPTS_timestamp);
             
-            
-            guint64 myDuration = gst_util_uint64_scale_int (
-                                      1, 30 * GST_MSECOND, 1);
-
+            //just test
+            guint64 myDuration = // abs_time - gst_defaultClock_prevTime;
+              gst_util_uint64_scale_int (
+                 1, app->config.exposure_ms * GST_MSECOND, 1);
+            //update for next frame
+            gst_defaultClock_prevTime = abs_time;
 			
 			
             GST_BUFFER_PTS (video_frame_GstBuffer) = myPTS_timestamp;
             //GST_BUFFER_DURATION (video_frame_GstBuffer) = myDuration;
-			
-			
-	        //// Timestamp stuff, based on system clock, NOT gst clock! works, but only without KLV:
-			//// this does not seem important, but PTS does... 0_o
-            //GST_BUFFER_TIMESTAMP(video_frame_GstBuffer) = GST_CLOCK_TIME_NONE;
-			//GST_BUFFER_PTS(video_frame_GstBuffer) = frame_capture_PTS;
 			
 			
 			
