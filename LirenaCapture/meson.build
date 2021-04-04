@@ -1,5 +1,14 @@
-project('ximeaJetsonStream', 'c', 'cpp')
+project('LirenaCapture', 'c', 'cpp',
+  version: '0.2.1',
+  meson_version : '>= 0.57.999',
+  default_options : [
+    'buildtype=debugoptimized'
+  ]
+)
 
+
+#'warning_level=1',
+#'c_std=gnu99'
 #gstreamer_api_version = '1.0'
 
 cc = meson.get_compiler('c')
@@ -34,13 +43,18 @@ all_deps = [
 
 install_directory = get_option('install_directory')
 
+incdir = include_directories('include')
 
 
-exe_source_files = ['src/ximeaJetsonStream.cpp']
+exe_source_files = [
+  'src/LirenaCaptureApp.cpp',
+  'src/LirenaConfig.cpp',
+  'src/LirenaKLVappsrc.cpp',
+  'src/LirenaCaptureDisplay.cpp']
 
-executable('ximeaJetsonStream',
+executable('lirenaCapture',
   exe_source_files,
   install : true,
-  dependencies : all_deps
+  dependencies : all_deps,
+  include_directories: incdir
 )
-

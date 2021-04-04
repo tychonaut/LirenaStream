@@ -20,8 +20,10 @@
 #define DO_SHOW_IMAGE 1
 // don't let RAM overflow and let latency explode unrecoverably,
 // rather skip frames
-#define MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 8
-#define STATUS_STRING_LENGTH 512
+// "2" works for 2k@140FPS, but there is some jam in the beginning.
+// "6" works without jam for 2k@140FPS,
+#define MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 6
+#define STATUS_STRING_LENGTH 4096
 
 // Define parameters for a static white balance
 #define WB_BLUE 2
@@ -315,7 +317,9 @@ int main()
       // all slots used?
       if(currentGpuMatIndex >= MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES)
       {
-        printf("Cuda queue is full! Skipping processing of acquired frame frame and sleeping for 1ms!");
+        printf("Cuda queue is full! "
+                 "Skipping processing of acquired frame "
+                 "and sleeping for 1ms!\n");
         // sleep for 1ms=1000microseconds; TODO handle this via mutexes etc.
         usleep(1000);
         // skip this execution
