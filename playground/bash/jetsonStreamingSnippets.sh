@@ -261,7 +261,8 @@ gst-launch-1.0 -vm  \
 # receive, show video, dump both video+klv to disk and also klv-only
 # works
 gst-launch-1.0 -v -m \
-  udpsrc port=5001 caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
+  udpsrc port=5001 buffer-size=100000000 \
+      caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
   rtpjitterbuffer latency=50 ! \
   rtpmp2tdepay ! \
   tee name=fork_mp2ts_to_disk_and_show \
@@ -294,9 +295,16 @@ gst-launch-1.0 -v -m \
 # works, but  in the end, corupted stuff is reported:
 # 0:00:16.246408611 98634 0x7f0ce4002350 ERROR                  libav :0:: corrupted macroblock 7 96 (total_coeff=-1)
 # 0:00:16.246463961 98634 0x7f0ce4002350 ERROR                  libav :0:: error while decoding MB 7 96
+# FAILS now, although they once worked, and still work for each demuxed stream (video and KLV) alone
+# suspected reason: corrupted VIDEO frames due to UDP losses are dropped,
+# but KLV buffers are NOT!
+# The way tsdemux works is "ASYNC (non-1:1) relation" between KLV and video frame buffers!
+# So with this, this goues out of sync pretty much all the time.
+# But tsdemux blocks if thre is no 1:1 relation. epic fail:
+# http://gstreamer-devel.966125.n4.nabble.com/Tsdemux-synchronous-file-klv-metadata-extraction-failed-td4677807.html 
 GST_DEBUG=2 \
 gst-launch-1.0 -vm  \
-  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/udp_rtpmp2tdepay_klv10.mpg ! \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/vlcStreamDump6_allElemStreams.ts ! \
   tsdemux name=mydemuxer \
   \
   mydemuxer. ! \
@@ -310,7 +318,170 @@ gst-launch-1.0 -vm  \
   mydemuxer. ! \
     meta/x-klv,parsed=true ! \
   queue ! \
-  filesink location=./klvOnly_fromDumpedLocalMp2ts_10.klv
+  filesink location=./vlcStreamDump6_allElemStreams.klv
 
 
+GST_DEBUG=2 \
+gst-launch-1.0 -vm  \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/vlcStreamDump6_allElemStreams.ts ! \
+  tsdemux name=mydemuxer \
+  \
+  mydemuxer. ! \
+    meta/x-klv,parsed=true ! \
+  queue ! \
+  filesink location=./vlcStreamDump6_allElemStreams.klv
+
+
+
+GST_DEBUG=2 \
+gst-launch-1.0 -vm  \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/vlcStreamDump6_allElemStreams.ts ! \
+  tsdemux name=mydemuxer \
+  \
+  mydemuxer. ! \
+    video/x-h264 ! \
+  h264parse ! \
+  queue !    \
+  avdec_h264 !   \
+  videoconvert !   \
+  xvimagesink 
+
+
+
+###----------------------------------------
+
+
+
+#TCP experiments:
+# receive, show video, dump both video+klv to disk and also klv-only
+# this one works, though with low fps and high latency
+GST_DEBUG=2 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 -v -m \
+  \
+  tcpclientsrc host=192.168.0.124 port=5001  timeout=0   ! \
+   application/x-rtp-stream,encoding-name=MP2T,media=video,clock-rate=90000 ! \
+  rtpstreamdepay ! \
+  \
+  rtpmp2tdepay ! \
+  tsparse set-timestamps=true  ! \
+  tsdemux name=myTsDemux  \
+  \
+  myTsDemux. ! \
+    video/x-h264 ! \
+  h264parse ! \
+    video/x-h264,streaming-format=byte-stream ! \
+  queue !    \
+  avdec_h264 !   \
+  videoconvert !   \
+  xvimagesink sync=false
+
+
+
+  tee name=fork_mp2ts_to_disk_and_show \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  filesink location=./tcp_rtpmp2tdepay_klv10.mpg \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  tsdemux name=myTsDemux  \
+  \
+  myTsDemux. ! \
+    video/x-h264 ! \
+  h264parse ! \
+  queue !    \
+  avdec_h264 !   \
+  videoconvert !   \
+  xvimagesink sync=false
+
+  \
+  \
+  myTsDemux. ! \
+    meta/x-klv,parsed=true ! \
+  queue ! \
+  filesink location=./klvOnly_from_UDP_mp2ts_10.klv
+
+
+
+
+
+  udpsrc port=5001 buffer-size=100000000 \
+      caps='application/x-rtp-stream, , clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
+    application/x-rtp-stream,media=video,clock-rate=90000,encoding-name=MP2T ! \
+rtpjitterbuffer latency=50 ! \
+  tcpclientsrc host=192.168.0.124 port=5001  timeout=0 ! \
+tcpserversrc host=192.168.0.124 port=5001  timeout=0 ! \ 
+do-timestamp=true
+
+
+xvimagesink sync=false  \
+
+
+
+
+
+
+
+
+
+
+
+
+
+#try to workaround the continuity-mismatch-problem by forking ans recombining,
+# hoing that invalid frames will get dropped also on the KLV side:
+# receive, show video, dump both video+klv to disk and also klv-only
+# FAIL!
+GST_DEBUG=2 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 -v -m \
+  udpsrc port=5001 buffer-size=100000000 \
+      caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
+  rtpjitterbuffer latency=50 ! \
+  rtpmp2tdepay ! \
+  tee name=fork_mp2ts_to_disk_and_show \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  filesink location=./udp_rtpmp2tdepay_klvAndVid_dump_1.mpg \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  tsparse ! \
+  tsdemux name=myTsDemux parse-private-sections=TRUE  \
+  \
+  myTsDemux. ! \
+    video/x-h264 ! \
+  h264parse ! \
+  tee name=fork_h264_to_show_and_remux \
+  \
+  fork_h264_to_show_and_remux. ! \
+  queue ! \
+  avdec_h264 ! \
+  videoconvert ! \
+  xvimagesink sync=false  \
+  \
+  fork_h264_to_show_and_remux. ! \
+  queue ! \
+  mpegtsmux name=myTsRemuxer  \
+  \
+  myTsRemuxer. ! \
+  tsparse ! \
+  queue ! \
+  filesink location=./udp_rtpmp2tdepay_klvAndVid_forkedAndRecombined_1.mpg \
+  \
+  myTsDemux. ! \
+    meta/x-klv,parsed=true ! \
+  tee name=fork_klv_to_dump_and_remux \
+  \
+  fork_klv_to_dump_and_remux. ! \
+  queue ! \
+  filesink location=./udp_rtpmp2tdepay_klvAndVid_dump_1.klv \
+  \
+  fork_klv_to_dump_and_remux. ! \
+  queue ! \
+  myTsRemuxer. 
+  
 
