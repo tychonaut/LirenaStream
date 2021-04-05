@@ -134,6 +134,7 @@ struct close_cb_params
 	bool doShutDownApp;
 	//always non-null, but pointee kan be 0, implying thead is inactive
 	pthread_t* videoThreadPtr;
+    LirenaCamera * camPtr;
 };
 
 gboolean close_cb(GtkWidget*, GdkEvent*,  

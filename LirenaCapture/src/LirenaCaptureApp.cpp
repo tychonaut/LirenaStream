@@ -40,22 +40,6 @@ int main(int argc, char **argv);
 
 
 
-// ----------------------------------------------------------------------------
-//{ Global variables; TODO rename, organize, replace by local aggregates
-
-// TODO replace by ApplicationState::appconfig
-//LirenaConfig globalLirenaCamStreamConfig ;
-
-//HANDLE cameraHandle = INVALID_HANDLE_VALUE;
-//pthread_t videoThread;
-
-//guintptr window_handle;
-
-BOOLEAN acquire, quitting, render = TRUE;
-
-// int maxcx, maxcy, roix0, roiy0, roicx, roicy;
-
-//}
 
 // creates zero-inited instance and parses and sets args/options
 LirenaCaptureApp *lirena_camStreamApp_create(int argc, char **argv)
@@ -84,10 +68,17 @@ void lirena_camStreamApp_destroy(LirenaCaptureApp *appPtr)
 	g_free(appPtr);
 }
 
+
+
+
+
+
+
 //-----------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
 	LirenaCaptureApp *appPtr = lirena_camStreamApp_create(argc, argv);
+
 
 #ifdef GDK_WINDOWING_X11
 	XInitThreads();
@@ -176,6 +167,7 @@ int main(int argc, char **argv)
 	close_cb_params *params = (close_cb_params *)g_malloc0(sizeof(close_cb_params));
 	params->doShutDownApp = true; // do shutdown on closing of control window!
 	params->videoThreadPtr = &appPtr->localDisplayCtrl.videoThread;
+	params->camPtr= &appPtr->camState;
 	g_signal_connect(appPtr->localDisplayCtrl.widgets.controlWindow,
 					 "delete_event", G_CALLBACK(close_cb), params);
 
@@ -203,9 +195,13 @@ int main(int argc, char **argv)
 	//start the main loop
 	gtk_main();
 
-	//exit
+	
+	
+	//exit program
+
 	gdk_threads_leave();
-	acquire = FALSE;
+
+	appPtr->camState.acquire = FALSE;
 	if (appPtr->localDisplayCtrl.videoThread)
 	{
 		pthread_join(appPtr->localDisplayCtrl.videoThread, NULL);
@@ -226,12 +222,12 @@ void *videoThread_shutdown(LirenaCaptureApp *appPtr)
 	gdk_threads_enter();
 
 	gtk_widget_destroy(appPtr->localDisplayCtrl.widgets.videoWindow);
-	if (quitting)
+	if (appPtr->camState.quitting)
 	{
 		gtk_main_quit();
 	}
 	xiStopAcquisition(appPtr->camState.cameraHandle);
-	acquire = FALSE;
+	appPtr->camState.acquire = FALSE;
 	xiCloseDevice(appPtr->camState.cameraHandle);
 	appPtr->camState.cameraHandle = INVALID_HANDLE_VALUE;
 	appPtr->localDisplayCtrl.videoThread = 0;
@@ -311,6 +307,7 @@ void *videoDisplay(void *appVoidPtr)
 	close_cb_params *params = (close_cb_params *)g_malloc0(sizeof(close_cb_params));
 	params->doShutDownApp = false; // do NOT shutdown on closing of control window!
 	params->videoThreadPtr = &app->localDisplayCtrl.videoThread;
+	params->camPtr= &app->camState;
 	g_signal_connect(app->localDisplayCtrl.widgets.videoWindow,
 					 "delete-event", G_CALLBACK(close_cb), params);
 
@@ -496,7 +493,7 @@ void *videoDisplay(void *appVoidPtr)
 
 	gst_defaultClock_prevTime = GST_ELEMENT(pipeline)->base_time;
 
-	while (acquire)
+	while (app->camState.acquire)
 	{
 
 		// grab image
@@ -514,7 +511,7 @@ void *videoDisplay(void *appVoidPtr)
 		guint64 frame_capture_PTS = (guint64)(curtime - firsttime) * GST_USECOND;
 		//}
 
-		if (render)
+		if (app->camState.doRender)
 		{
 			unsigned long raw_image_buffer_size =
 				image.width * image.height * (image.frm == XI_RAW8 ? 1 : 4);
@@ -707,11 +704,11 @@ void *videoDisplay(void *appVoidPtr)
 				break;
 			}
 
-//-----------------------------------------------------------------
-//{ KLV buffer injection
+			//-----------------------------------------------------------------
+			//{ KLV buffer injection
 
-// hundred thousand bytes
-#define KLV_BUFFER_MAX_SIZE 100000
+			// hundred thousand bytes
+			#define KLV_BUFFER_MAX_SIZE 100000
 			guint8 klv_data[KLV_BUFFER_MAX_SIZE];
 			memset(klv_data, 0, KLV_BUFFER_MAX_SIZE);
 
@@ -872,13 +869,13 @@ gboolean close_cb(GtkWidget *, GdkEvent *,
 				  //hack
 				  close_cb_params *params)
 {
-	quitting = (params->doShutDownApp) ? TRUE : FALSE;
+	params->camPtr->quitting = (params->doShutDownApp) ? TRUE : FALSE;
 
 	// pointer non null and pointee not 0 --> video thread is active
 	if ((*(params->videoThreadPtr)) != 0)
 	{
 		//video thead is active, shall be shutdown first
-		acquire = FALSE;
+		params->camPtr->acquire = FALSE;
 	}
 	else
 	{
@@ -895,7 +892,8 @@ gboolean camTriggerHandler(LirenaCaptureApp *app)
 {
 	int level = 0;
 
-	if (acquire && app->camState.cameraHandle != INVALID_HANDLE_VALUE)
+	if (app->camState.acquire &&
+	    app->camState.cameraHandle != INVALID_HANDLE_VALUE)
 	{
 		xiSetParamInt(app->camState.cameraHandle, XI_PRM_GPI_SELECTOR, 1);
 		xiGetParamInt(app->camState.cameraHandle, XI_PRM_GPI_LEVEL, &level);
@@ -913,12 +911,13 @@ gboolean camTriggerHandler(LirenaCaptureApp *app)
 
 	gtk_toggle_button_set_inconsistent(
 		GTK_TOGGLE_BUTTON(app->localDisplayCtrl.widgets.run),
-		gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(app->localDisplayCtrl.widgets.run)) != acquire);
+		gtk_toggle_button_get_active(
+			GTK_TOGGLE_BUTTON(app->localDisplayCtrl.widgets.run)) != app->camState.acquire);
 
-	gtk_widget_set_sensitive(app->localDisplayCtrl.widgets.boxx, acquire);
-	gtk_widget_set_sensitive(app->localDisplayCtrl.widgets.boxy, acquire);
-	gtk_widget_set_sensitive(app->localDisplayCtrl.widgets.exp, acquire);
-	gtk_widget_set_sensitive(app->localDisplayCtrl.widgets.gain, acquire);
+	gtk_widget_set_sensitive(app->localDisplayCtrl.widgets.boxx, app->camState.acquire);
+	gtk_widget_set_sensitive(app->localDisplayCtrl.widgets.boxy, app->camState.acquire);
+	gtk_widget_set_sensitive(app->localDisplayCtrl.widgets.exp,  app->camState.acquire);
+	gtk_widget_set_sensitive(app->localDisplayCtrl.widgets.gain, app->camState.acquire);
 
 	return TRUE;
 }
@@ -1039,7 +1038,7 @@ gboolean update_raw(GtkToggleButton *raw, LirenaCaptureApp *appPtr)
 
 gboolean update_show(GtkToggleButton *show, LirenaCamera *cam) //gpointer)
 {
-	render = gtk_toggle_button_get_active(show);
+	cam->doRender = gtk_toggle_button_get_active(show);
 	return TRUE;
 }
 
@@ -1048,8 +1047,8 @@ gboolean update_run(GtkToggleButton *run, LirenaCaptureApp *appPtr)
 	LirenaCaptureWidgets *widgets = &appPtr->localDisplayCtrl.widgets;
 
 	gtk_toggle_button_set_inconsistent(run, false);
-	acquire = gtk_toggle_button_get_active(run);
-	if (acquire && appPtr->camState.cameraHandle == INVALID_HANDLE_VALUE)
+	appPtr->camState.acquire = gtk_toggle_button_get_active(run);
+	if (appPtr->camState.acquire && appPtr->camState.cameraHandle == INVALID_HANDLE_VALUE)
 	{
 		DWORD nIndex = 0;
 		char *env = getenv("CAM_INDEX");
@@ -1062,7 +1061,7 @@ gboolean update_run(GtkToggleButton *run, LirenaCaptureApp *appPtr)
 		if (xiOpenDevice(nIndex, &appPtr->camState.cameraHandle) != XI_OK)
 		{
 			printf("Couldn't setup camera!\n");
-			acquire = FALSE;
+			appPtr->camState.acquire = FALSE;
 			return TRUE;
 		}
 		update_raw(GTK_TOGGLE_BUTTON(widgets->raw), appPtr);
@@ -1084,10 +1083,10 @@ gboolean update_run(GtkToggleButton *run, LirenaCaptureApp *appPtr)
 			exit(1);
 		}
 	}
-	gtk_widget_set_sensitive(widgets->boxx, acquire);
-	gtk_widget_set_sensitive(widgets->boxy, acquire);
-	gtk_widget_set_sensitive(widgets->exp, acquire);
-	gtk_widget_set_sensitive(widgets->gain, acquire);
+	gtk_widget_set_sensitive(widgets->boxx, appPtr->camState.acquire);
+	gtk_widget_set_sensitive(widgets->boxy, appPtr->camState.acquire);
+	gtk_widget_set_sensitive(widgets->exp, appPtr->camState.acquire);
+	gtk_widget_set_sensitive(widgets->gain, appPtr->camState.acquire);
 	return TRUE;
 }
 
