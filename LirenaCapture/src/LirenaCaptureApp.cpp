@@ -23,9 +23,9 @@
 
 //----------------------------------------------------------------------------
 // Type forwards:
-struct LirenaCamStreamApp;
+struct LirenaCaptureApp;
 struct LirenaCamera;
-//struct LirenaCamStreamLocalDisplay;
+//struct LirenaCaptureDisplay;
 
 
 
@@ -62,13 +62,13 @@ struct LirenaFrameMeta
 };
 
 
-struct LirenaCamStreamApp
+struct LirenaCaptureApp
 {
-	LirenaCamStreamConfig config;
+	LirenaConfig config;
 
 	LirenaCamera camState;
 
-	LirenaCamStreamLocalDisplay localDisplay;
+	LirenaCaptureDisplay localDisplay;
 };
 
 
@@ -86,28 +86,29 @@ int main(int argc, char **argv);
 
 
 // TODO replace by ApplicationState::appconfig
-//LirenaCamStreamConfig globalLirenaCamStreamConfig ;
+//LirenaConfig globalLirenaCamStreamConfig ;
 
 
 //HANDLE cameraHandle = INVALID_HANDLE_VALUE;
+//pthread_t videoThread;
+
+guintptr window_handle;
 
 BOOLEAN acquire, quitting, render = TRUE;
 
 int maxcx, maxcy, roix0, roiy0, roicx, roicy;
 
 
-pthread_t videoThread;
-guintptr window_handle;
 
 
 //}
 
 // creates zero-inited instance and parses and sets args/options
-LirenaCamStreamApp* lirena_camStreamApp_create(int argc, char **argv)
+LirenaCaptureApp* lirena_camStreamApp_create(int argc, char **argv)
 {
-    LirenaCamStreamApp* appPtr = 
+    LirenaCaptureApp* appPtr = 
 		//init all to zero/nullptr/false
-		(LirenaCamStreamApp*) g_malloc0(sizeof(LirenaCamStreamApp));
+		(LirenaCaptureApp*) g_malloc0(sizeof(LirenaCaptureApp));
 	appPtr->camState.cameraHandle = INVALID_HANDLE_VALUE;
 
 	appPtr->camState.acquire = TRUE;
@@ -117,11 +118,13 @@ LirenaCamStreamApp* lirena_camStreamApp_create(int argc, char **argv)
 	appPtr->config = parseArguments(argc, argv);
 
 	//TODO continue;
+	appPtr->localDisplay.videoThread = 0;
+	appPtr->localDisplay.window_handle = 0;
 
 	return appPtr;
 }
 
-void lirena_camStreamApp_destroy(LirenaCamStreamApp* appPtr)
+void lirena_camStreamApp_destroy(LirenaCaptureApp* appPtr)
 {
 	g_free(appPtr);
 }
@@ -131,14 +134,10 @@ void lirena_camStreamApp_destroy(LirenaCamStreamApp* appPtr)
 //-----------------------------------------------------------------------------
 int main(int argc, char **argv)
 {    
-	LirenaCamStreamApp*  appPtr = lirena_camStreamApp_create(argc, argv);
+	LirenaCaptureApp*  appPtr = lirena_camStreamApp_create(argc, argv);
 
 	
 
-	//globalLirenaCamStreamConfig = 
-    
-
-	//LirenaCamStreamControlWindow controlWindow;
 #ifdef GDK_WINDOWING_X11
 	XInitThreads();
 #endif
@@ -150,99 +149,108 @@ int main(int argc, char **argv)
 	gst_init(&argc, &argv);
 	gtk_init(&argc, &argv);
 	//create widgets
-	appPtr->localDisplay.controlWindow.window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-	appPtr->localDisplay.controlWindow.boxmain = gtk_vbox_new(FALSE, 0);
-	appPtr->localDisplay.controlWindow.boxgpi = gtk_hbox_new(TRUE, 0);
-	appPtr->localDisplay.controlWindow.boxx = gtk_hbox_new(FALSE, 0);
-	appPtr->localDisplay.controlWindow.boxy = gtk_hbox_new(FALSE, 0);
-	appPtr->localDisplay.controlWindow.labelexp = gtk_label_new("Exposure (ms)");
-	appPtr->localDisplay.controlWindow.labelgain = gtk_label_new("Gain (dB)");
-	appPtr->localDisplay.controlWindow.labelx0 = gtk_label_new("x0");
-	appPtr->localDisplay.controlWindow.labelcx = gtk_label_new("cx");
-	appPtr->localDisplay.controlWindow.labely0 = gtk_label_new("y0");
-	appPtr->localDisplay.controlWindow.labelcy = gtk_label_new("cy");
-	appPtr->localDisplay.controlWindow.gpi1 = gtk_check_button_new_with_label("GPI1");
-	appPtr->localDisplay.controlWindow.gpi2 = gtk_check_button_new_with_label("GPI2");
-	appPtr->localDisplay.controlWindow.gpi3 = gtk_check_button_new_with_label("GPI3");
-	appPtr->localDisplay.controlWindow.gpi4 = gtk_check_button_new_with_label("GPI4");
-	appPtr->localDisplay.controlWindow.exp = gtk_hscale_new_with_range(1, 1000, 1);
-	appPtr->localDisplay.controlWindow.gain = gtk_hscale_new_with_range(0, 1, 0.1); //use dummy limits
-	appPtr->localDisplay.controlWindow.x0 = gtk_spin_button_new_with_range(0, 128, 2); //use dummy max limit
-	appPtr->localDisplay.controlWindow.y0 = gtk_spin_button_new_with_range(0, 128, 2); //use dummy max limit
-	appPtr->localDisplay.controlWindow.cx = gtk_spin_button_new_with_range(4, 128, 4); //use dummy max limit
-	appPtr->localDisplay.controlWindow.cy = gtk_spin_button_new_with_range(2, 128, 2); //use dummy max limit
-	appPtr->localDisplay.controlWindow.raw = gtk_toggle_button_new_with_label("Display RAW data");
-	appPtr->localDisplay.controlWindow.show = gtk_toggle_button_new_with_label("Live view");
-	appPtr->localDisplay.controlWindow.run = gtk_toggle_button_new_with_label("Acquisition");
+	appPtr->localDisplay.widgets.controlWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	appPtr->localDisplay.widgets.boxmain = gtk_vbox_new(FALSE, 0);
+	appPtr->localDisplay.widgets.boxgpi = gtk_hbox_new(TRUE, 0);
+	appPtr->localDisplay.widgets.boxx = gtk_hbox_new(FALSE, 0);
+	appPtr->localDisplay.widgets.boxy = gtk_hbox_new(FALSE, 0);
+	appPtr->localDisplay.widgets.labelexp = gtk_label_new("Exposure (ms)");
+	appPtr->localDisplay.widgets.labelgain = gtk_label_new("Gain (dB)");
+	appPtr->localDisplay.widgets.labelx0 = gtk_label_new("x0");
+	appPtr->localDisplay.widgets.labelcx = gtk_label_new("cx");
+	appPtr->localDisplay.widgets.labely0 = gtk_label_new("y0");
+	appPtr->localDisplay.widgets.labelcy = gtk_label_new("cy");
+	appPtr->localDisplay.widgets.gpi1 = gtk_check_button_new_with_label("GPI1");
+	appPtr->localDisplay.widgets.gpi2 = gtk_check_button_new_with_label("GPI2");
+	appPtr->localDisplay.widgets.gpi3 = gtk_check_button_new_with_label("GPI3");
+	appPtr->localDisplay.widgets.gpi4 = gtk_check_button_new_with_label("GPI4");
+	appPtr->localDisplay.widgets.exp = gtk_hscale_new_with_range(1, 1000, 1);
+	appPtr->localDisplay.widgets.gain = gtk_hscale_new_with_range(0, 1, 0.1); //use dummy limits
+	appPtr->localDisplay.widgets.x0 = gtk_spin_button_new_with_range(0, 128, 2); //use dummy max limit
+	appPtr->localDisplay.widgets.y0 = gtk_spin_button_new_with_range(0, 128, 2); //use dummy max limit
+	appPtr->localDisplay.widgets.cx = gtk_spin_button_new_with_range(4, 128, 4); //use dummy max limit
+	appPtr->localDisplay.widgets.cy = gtk_spin_button_new_with_range(2, 128, 2); //use dummy max limit
+	appPtr->localDisplay.widgets.raw = gtk_toggle_button_new_with_label("Display RAW data");
+	appPtr->localDisplay.widgets.show = gtk_toggle_button_new_with_label("Live view");
+	appPtr->localDisplay.widgets.run = gtk_toggle_button_new_with_label("Acquisition");
 	//tune them
-	gtk_window_set_title(GTK_WINDOW(appPtr->localDisplay.controlWindow.window), "streamViewer control");
-	gtk_window_set_keep_above(GTK_WINDOW(appPtr->localDisplay.controlWindow.window), TRUE);
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplay.controlWindow.raw), TRUE);
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplay.controlWindow.show), TRUE);
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplay.controlWindow.run), TRUE); //actual start is delayed by 100ms, see below
-	gtk_widget_set_sensitive(appPtr->localDisplay.controlWindow.boxgpi, FALSE);
-	gtk_scale_set_digits(GTK_SCALE(appPtr->localDisplay.controlWindow.exp), 0);
-	gtk_range_set_update_policy(GTK_RANGE(appPtr->localDisplay.controlWindow.exp), GTK_UPDATE_DISCONTINUOUS);
-	gtk_range_set_update_policy(GTK_RANGE(appPtr->localDisplay.controlWindow.gain), GTK_UPDATE_DISCONTINUOUS);
-	gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(appPtr->localDisplay.controlWindow.exp)), 10);
-	gtk_scale_set_value_pos(GTK_SCALE(appPtr->localDisplay.controlWindow.exp), GTK_POS_RIGHT);
-	gtk_scale_set_value_pos(GTK_SCALE(appPtr->localDisplay.controlWindow.gain), GTK_POS_RIGHT);
-	gtk_widget_set_sensitive(appPtr->localDisplay.controlWindow.boxx, FALSE);
-	gtk_widget_set_sensitive(appPtr->localDisplay.controlWindow.boxy, FALSE);
-	gtk_widget_set_sensitive(appPtr->localDisplay.controlWindow.exp, FALSE);
-	gtk_widget_set_sensitive(appPtr->localDisplay.controlWindow.gain, FALSE);
+	gtk_window_set_title(GTK_WINDOW(appPtr->localDisplay.widgets.controlWindow), "streamViewer control");
+	gtk_window_set_keep_above(GTK_WINDOW(appPtr->localDisplay.widgets.controlWindow), TRUE);
+	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplay.widgets.raw), TRUE);
+	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplay.widgets.show), TRUE);
+	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplay.widgets.run), TRUE); //actual start is delayed by 100ms, see below
+	gtk_widget_set_sensitive(appPtr->localDisplay.widgets.boxgpi, FALSE);
+	gtk_scale_set_digits(GTK_SCALE(appPtr->localDisplay.widgets.exp), 0);
+	gtk_range_set_update_policy(GTK_RANGE(appPtr->localDisplay.widgets.exp), GTK_UPDATE_DISCONTINUOUS);
+	gtk_range_set_update_policy(GTK_RANGE(appPtr->localDisplay.widgets.gain), GTK_UPDATE_DISCONTINUOUS);
+	gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(appPtr->localDisplay.widgets.exp)), 10);
+	gtk_scale_set_value_pos(GTK_SCALE(appPtr->localDisplay.widgets.exp), GTK_POS_RIGHT);
+	gtk_scale_set_value_pos(GTK_SCALE(appPtr->localDisplay.widgets.gain), GTK_POS_RIGHT);
+	gtk_widget_set_sensitive(appPtr->localDisplay.widgets.boxx, FALSE);
+	gtk_widget_set_sensitive(appPtr->localDisplay.widgets.boxy, FALSE);
+	gtk_widget_set_sensitive(appPtr->localDisplay.widgets.exp, FALSE);
+	gtk_widget_set_sensitive(appPtr->localDisplay.widgets.gain, FALSE);
 	//pack everything into window
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxgpi), appPtr->localDisplay.controlWindow.gpi1);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxgpi), appPtr->localDisplay.controlWindow.gpi2);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxgpi), appPtr->localDisplay.controlWindow.gpi3);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxgpi), appPtr->localDisplay.controlWindow.gpi4);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxmain), appPtr->localDisplay.controlWindow.boxgpi);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxx), appPtr->localDisplay.controlWindow.labelx0);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxx), appPtr->localDisplay.controlWindow.x0);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxy), appPtr->localDisplay.controlWindow.labely0);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxy), appPtr->localDisplay.controlWindow.y0);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxx), appPtr->localDisplay.controlWindow.labelcx);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxx), appPtr->localDisplay.controlWindow.cx);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxy), appPtr->localDisplay.controlWindow.labelcy);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxy), appPtr->localDisplay.controlWindow.cy);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxmain), appPtr->localDisplay.controlWindow.boxx);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxmain), appPtr->localDisplay.controlWindow.boxy);	
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxmain), appPtr->localDisplay.controlWindow.labelexp);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxmain), appPtr->localDisplay.controlWindow.exp);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxmain), appPtr->localDisplay.controlWindow.labelgain);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxmain), appPtr->localDisplay.controlWindow.gain);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxmain), appPtr->localDisplay.controlWindow.raw);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxmain), appPtr->localDisplay.controlWindow.show);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.boxmain), appPtr->localDisplay.controlWindow.run);
-	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.controlWindow.window), appPtr->localDisplay.controlWindow.boxmain);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxgpi), appPtr->localDisplay.widgets.gpi1);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxgpi), appPtr->localDisplay.widgets.gpi2);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxgpi), appPtr->localDisplay.widgets.gpi3);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxgpi), appPtr->localDisplay.widgets.gpi4);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxmain), appPtr->localDisplay.widgets.boxgpi);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxx), appPtr->localDisplay.widgets.labelx0);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxx), appPtr->localDisplay.widgets.x0);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxy), appPtr->localDisplay.widgets.labely0);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxy), appPtr->localDisplay.widgets.y0);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxx), appPtr->localDisplay.widgets.labelcx);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxx), appPtr->localDisplay.widgets.cx);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxy), appPtr->localDisplay.widgets.labelcy);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxy), appPtr->localDisplay.widgets.cy);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxmain), appPtr->localDisplay.widgets.boxx);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxmain), appPtr->localDisplay.widgets.boxy);	
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxmain), appPtr->localDisplay.widgets.labelexp);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxmain), appPtr->localDisplay.widgets.exp);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxmain), appPtr->localDisplay.widgets.labelgain);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxmain), appPtr->localDisplay.widgets.gain);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxmain), appPtr->localDisplay.widgets.raw);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxmain), appPtr->localDisplay.widgets.show);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.boxmain), appPtr->localDisplay.widgets.run);
+	gtk_container_add(GTK_CONTAINER(appPtr->localDisplay.widgets.controlWindow), appPtr->localDisplay.widgets.boxmain);
 	//register handlers
 	gdk_threads_add_timeout(1000, (GSourceFunc)time_handler, (gpointer)appPtr);//.localDisplay.controlWindow);
 	//only way I (ximea dev) found to make sure window is displayed right away:
 	gdk_threads_add_timeout(100, (GSourceFunc)start_cb, (gpointer)appPtr);//appPtr->localDisplay.controlWindow); 
 
-	g_signal_connect(appPtr->localDisplay.controlWindow.window, 
-		"delete_event", G_CALLBACK(close_cb), (gpointer)TRUE);
-	g_signal_connect(gtk_range_get_adjustment(GTK_RANGE(appPtr->localDisplay.controlWindow.gain)), 
+
+	// Messy hack to handle "shutdown app if CONTROL window is closed, 
+	// but to sth ales if RENDER window is closed".
+	// The original logic didn't even work in the first place...
+    close_cb_params* params = (close_cb_params*) g_malloc0(sizeof(close_cb_params));
+	params->doShutDownApp = true; // do shutdown on closing of control window!
+	params->videoThreadPtr = & appPtr->localDisplay.videoThread;
+	g_signal_connect(appPtr->localDisplay.widgets.controlWindow, 
+		"delete_event", G_CALLBACK(close_cb), params);
+
+
+	g_signal_connect(gtk_range_get_adjustment(GTK_RANGE(appPtr->localDisplay.widgets.gain)), 
 		"value_changed", G_CALLBACK(update_gain), &appPtr->camState);
-	g_signal_connect(gtk_range_get_adjustment(GTK_RANGE(appPtr->localDisplay.controlWindow.exp)), 
+	g_signal_connect(gtk_range_get_adjustment(GTK_RANGE(appPtr->localDisplay.widgets.exp)), 
 		"value_changed", G_CALLBACK(update_exposure), &appPtr->camState);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplay.controlWindow.x0)), 
+	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplay.widgets.x0)), 
 		"value_changed", G_CALLBACK(update_x0), &appPtr->camState);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplay.controlWindow.y0)), 
+	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplay.widgets.y0)), 
 		"value_changed", G_CALLBACK(update_y0), &appPtr->camState);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplay.controlWindow.cx)), 
+	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplay.widgets.cx)), 
 		"value_changed", G_CALLBACK(update_cx), &appPtr->camState);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplay.controlWindow.cy)), 
+	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplay.widgets.cy)), 
 		"value_changed", G_CALLBACK(update_cy), &appPtr->camState);
-	g_signal_connect(appPtr->localDisplay.controlWindow.raw, "toggled",
+	g_signal_connect(appPtr->localDisplay.widgets.raw, "toggled",
 	 	G_CALLBACK(update_raw), (gpointer)appPtr);
-	g_signal_connect(appPtr->localDisplay.controlWindow.show, "toggled",
+	g_signal_connect(appPtr->localDisplay.widgets.show, "toggled",
 	 	G_CALLBACK(update_show), &appPtr->camState);
-	g_signal_connect(appPtr->localDisplay.controlWindow.run, "toggled", 
-		G_CALLBACK(update_run), (gpointer)appPtr);//appPtr->localDisplay.controlWindow);
+	g_signal_connect(appPtr->localDisplay.widgets.run, "toggled", 
+		G_CALLBACK(update_run), (gpointer)appPtr);//appPtr->localDisplay.widgets);
 
 	//show window
-	gtk_widget_show_all(appPtr->localDisplay.controlWindow.window);
+	gtk_widget_show_all(appPtr->localDisplay.widgets.controlWindow);
 	//start the main loop
 	gtk_main();
 
@@ -250,9 +258,10 @@ int main(int argc, char **argv)
 	//exit
 	gdk_threads_leave();
 	acquire = FALSE;
-	if(videoThread)
+	if(appPtr->localDisplay.videoThread)
 	{
-		pthread_join(videoThread, NULL);
+		pthread_join(appPtr->localDisplay.videoThread, NULL);
+		appPtr->localDisplay.videoThread = 0;
 	}
 
 	lirena_camStreamApp_destroy(appPtr);
@@ -268,6 +277,26 @@ int main(int argc, char **argv)
 //TODO outsourc pure GUI code
 
 
+void* videoThread_shutdown(LirenaCaptureApp * appPtr)
+{
+	gdk_threads_enter();
+
+	gtk_widget_destroy(appPtr->localDisplay.widgets.videoWindow);
+	if(quitting)
+	{
+		gtk_main_quit();
+	}
+	xiStopAcquisition(appPtr->camState.cameraHandle);
+	acquire = FALSE;
+	xiCloseDevice(appPtr->camState.cameraHandle);
+	appPtr->camState.cameraHandle = INVALID_HANDLE_VALUE;
+	appPtr->localDisplay.videoThread = 0;
+
+	gdk_threads_leave();
+
+	return NULL;
+}
+
 
 
 
@@ -275,7 +304,7 @@ int main(int argc, char **argv)
 //void* videoDisplay(void*) 
 void* videoDisplay(void* appVoidPtr)
 {	
-	LirenaCamStreamApp* app = (LirenaCamStreamApp*) appVoidPtr;
+	LirenaCaptureApp* app = (LirenaCaptureApp*) appVoidPtr;
 
 	GstElement *pipeline = 0;
 	GstElement *appsrc_video = 0;
@@ -319,25 +348,45 @@ void* videoDisplay(void* appVoidPtr)
 	
 	if(xiStartAcquisition(app->camState.cameraHandle) != XI_OK) 
 	{
-		goto exit;
+		return videoThread_shutdown(app);
 	}
 	
 	
 	
-	GtkWidget *videoWindow;
-	GdkScreen *screen;
-	
 	gdk_threads_enter();
-	videoWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-	gtk_window_set_title(GTK_WINDOW(videoWindow), "streamViewer");
-	gtk_widget_set_double_buffered(videoWindow, FALSE);
-	g_signal_connect(videoWindow, "realize", G_CALLBACK(video_widget_realize_cb), NULL);
-	g_signal_connect(videoWindow, "delete-event", G_CALLBACK(close_cb), NULL);
-	gtk_widget_show_all(videoWindow);
-	gtk_widget_realize(videoWindow);
-	screen = gdk_screen_get_default();
-	max_width = 0.8 * gdk_screen_get_width(screen);
-	max_height = 0.8 * gdk_screen_get_width(screen);
+
+	//GdkScreen *screen;
+	
+	app->localDisplay.widgets.videoWindow  = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	
+
+
+	gtk_window_set_title(
+		GTK_WINDOW(app->localDisplay.widgets.videoWindow), "streamViewer");
+	gtk_widget_set_double_buffered(
+		app->localDisplay.widgets.videoWindow, FALSE);
+	
+	g_signal_connect(app->localDisplay.widgets.videoWindow,
+		"realize", G_CALLBACK(video_widget_realize_cb), NULL);
+
+	// Messy hack to handle "shutdown app if CONTROL window is closed, 
+	// but to sth ales if RENDER window is closed".
+	// The original logic didn't even work in the first place...
+    close_cb_params* params = (close_cb_params*) g_malloc0(sizeof(close_cb_params));
+	params->doShutDownApp = false; // do NOT shutdown on closing of control window!
+	params->videoThreadPtr = & app->localDisplay.videoThread;
+	g_signal_connect(app->localDisplay.widgets.videoWindow, 
+		"delete-event", G_CALLBACK(close_cb), params);  
+		
+
+	gtk_widget_show_all(app->localDisplay.widgets.videoWindow);
+	gtk_widget_realize(app->localDisplay.widgets.videoWindow);
+
+	app->localDisplay.widgets.screen = gdk_screen_get_default();
+
+	max_width = 0.8 * gdk_screen_get_width(app->localDisplay.widgets.screen);
+	max_height = 0.8 * gdk_screen_get_width(app->localDisplay.widgets.screen);
+	
 	gdk_threads_leave();
 	
 
@@ -509,7 +558,9 @@ void* videoDisplay(void* appVoidPtr)
 	
 	     
 	if(!pipeline)
-		goto exit;
+	{
+		return videoThread_shutdown(app);
+	}
 		
  
 		
@@ -712,7 +763,7 @@ void* videoDisplay(void* appVoidPtr)
 				g_object_set(G_OBJECT(scale_element), "caps", size_caps, NULL);
 				
 				gdk_threads_enter();
-				gtk_window_resize(GTK_WINDOW(videoWindow), width, height);
+				gtk_window_resize(GTK_WINDOW(app->localDisplay.widgets.videoWindow), width, height);
 				gdk_threads_leave();
 			}
 			
@@ -880,7 +931,9 @@ void* videoDisplay(void* appVoidPtr)
 			    lostframes, 
 			    1000000.0 * (frames - prevframes) / (curtime - prevtime)
 			);
-			gtk_window_set_title(GTK_WINDOW(videoWindow), statistics_string);
+			gtk_window_set_title(
+				GTK_WINDOW(app->localDisplay.widgets.videoWindow), 
+				statistics_string);
 			
 			prevframes = frames;
 			prevtime = curtime;
@@ -900,20 +953,9 @@ void* videoDisplay(void* appVoidPtr)
 	gst_element_set_state(pipeline, GST_STATE_NULL);
 	gst_object_unref(GST_OBJECT(pipeline));	
 	
-exit:
-	gdk_threads_enter();
-	gtk_widget_destroy(videoWindow);
-	if(quitting)
-		gtk_main_quit();
-	xiStopAcquisition(app->camState.cameraHandle);
-	acquire = FALSE;
-	xiCloseDevice(app->camState.cameraHandle);
-	app->camState.cameraHandle = INVALID_HANDLE_VALUE;
-	videoThread = 0;
-	gdk_threads_leave();
-	//} end cleanup	
-	
-	return 0;
+//exit:
+
+	return videoThread_shutdown(app);
 }
 
 
@@ -941,13 +983,27 @@ void video_widget_realize_cb(GtkWidget* widget,  LirenaCamera* cam) //gpointer)
 
 
 
-gboolean close_cb(GtkWidget*, GdkEvent*, gpointer quit) 
+
+gboolean close_cb(GtkWidget*, GdkEvent*,  
+	//hack
+	close_cb_params * params)
 {
-	quitting = quit ? TRUE : FALSE;
-	if(videoThread)
+	quitting = (params->doShutDownApp) ? TRUE : FALSE;
+
+	// pointer non null and pointee not 0 --> video thread is active
+	if( (*(params->videoThreadPtr)) != 0)
+	{
+		//video thead is active, shall be shutdown first
 		acquire = FALSE;
+	}
 	else
+	{
+		//video thead is already joined, we can leave GUI stuff altogether
 		gtk_main_quit();
+	}
+
+	g_free(params);
+
 	return TRUE;
 }
 
@@ -955,34 +1011,33 @@ gboolean close_cb(GtkWidget*, GdkEvent*, gpointer quit)
 
 
 
-gboolean time_handler(LirenaCamStreamApp* app) 
-//gboolean time_handler(LirenaCamStreamControlWindow *controlWindow) 
+gboolean time_handler(LirenaCaptureApp* app) 
 {
 	int level = 0;
 
 	if(acquire && app->camState.cameraHandle != INVALID_HANDLE_VALUE) {
 		xiSetParamInt(app->camState.cameraHandle, XI_PRM_GPI_SELECTOR, 1);
 		xiGetParamInt(app->camState.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app->localDisplay.controlWindow.gpi1), level);
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app->localDisplay.widgets.gpi1), level);
 		xiSetParamInt(app->camState.cameraHandle, XI_PRM_GPI_SELECTOR, 2);
 		xiGetParamInt(app->camState.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app->localDisplay.controlWindow.gpi2), level);
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app->localDisplay.widgets.gpi2), level);
 		xiSetParamInt(app->camState.cameraHandle, XI_PRM_GPI_SELECTOR, 3);
 		xiGetParamInt(app->camState.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app->localDisplay.controlWindow.gpi3), level);
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app->localDisplay.widgets.gpi3), level);
 		xiSetParamInt(app->camState.cameraHandle, XI_PRM_GPI_SELECTOR, 4);
 		xiGetParamInt(app->camState.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app->localDisplay.controlWindow.gpi4), level);
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app->localDisplay.widgets.gpi4), level);
 	}
 
 	gtk_toggle_button_set_inconsistent(
-	  GTK_TOGGLE_BUTTON(app->localDisplay.controlWindow.run), 
-	  gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(app->localDisplay.controlWindow.run)) != acquire);
+	  GTK_TOGGLE_BUTTON(app->localDisplay.widgets.run), 
+	  gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(app->localDisplay.widgets.run)) != acquire);
 
-	gtk_widget_set_sensitive(app->localDisplay.controlWindow.boxx, acquire);
-	gtk_widget_set_sensitive(app->localDisplay.controlWindow.boxy, acquire);
-	gtk_widget_set_sensitive(app->localDisplay.controlWindow.exp, acquire);
-	gtk_widget_set_sensitive(app->localDisplay.controlWindow.gain, acquire);
+	gtk_widget_set_sensitive(app->localDisplay.widgets.boxx, acquire);
+	gtk_widget_set_sensitive(app->localDisplay.widgets.boxy, acquire);
+	gtk_widget_set_sensitive(app->localDisplay.widgets.exp, acquire);
+	gtk_widget_set_sensitive(app->localDisplay.widgets.gain, acquire);
 
 	return TRUE;
 }
@@ -1048,9 +1103,9 @@ gboolean update_gain(GtkAdjustment *adj,  LirenaCamera* cam) //gpointer)
 }
 
 
-gboolean update_raw(GtkToggleButton *raw, LirenaCamStreamApp* appPtr)
+gboolean update_raw(GtkToggleButton *raw, LirenaCaptureApp* appPtr)
 {
-	LirenaCamStreamControlWindow *controlWindow = & appPtr->localDisplay.controlWindow;
+	LirenaCaptureWidgets *widgets = & appPtr->localDisplay.widgets;
 	HANDLE cameraHandle = appPtr->camState.cameraHandle;
 
 	if(cameraHandle != INVALID_HANDLE_VALUE) {
@@ -1067,12 +1122,12 @@ gboolean update_raw(GtkToggleButton *raw, LirenaCamStreamApp* appPtr)
 		
 		float midgain = (maxgain + mingain) * 0.5f;
 		
-		//gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(controlWindow->gain)), mingain, mingain, maxgain, 0.1, 1, 0);
-		gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(controlWindow->gain)), midgain, mingain, maxgain, 0.1, 1, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(controlWindow->x0)), roix0, 0, maxcx-4, 2, 20, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(controlWindow->y0)), roiy0, 0, maxcy-2, 2, 20, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(controlWindow->cx)), roicx, 4, maxcx, 4, 20, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(controlWindow->cy)), roicy, 2, maxcy, 2, 20, 0);
+		//gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(widgets->gain)), mingain, mingain, maxgain, 0.1, 1, 0);
+		gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(widgets->gain)), midgain, mingain, maxgain, 0.1, 1, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(widgets->x0)), roix0, 0, maxcx-4, 2, 20, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(widgets->y0)), roiy0, 0, maxcy-2, 2, 20, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(widgets->cx)), roicx, 4, maxcx, 4, 20, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(widgets->cy)), roicy, 2, maxcy, 2, 20, 0);
 		
 		//xiSetParamFloat(cameraHandle, XI_PRM_GAIN, mingain);
 		xiSetParamFloat(cameraHandle, XI_PRM_GAIN, midgain);
@@ -1092,10 +1147,10 @@ gboolean update_show(GtkToggleButton *show,  LirenaCamera* cam) //gpointer)
 }
 
 
-gboolean update_run(GtkToggleButton *run, LirenaCamStreamApp* appPtr)
+gboolean update_run(GtkToggleButton *run, LirenaCaptureApp* appPtr)
 {
-	LirenaCamStreamControlWindow *controlWindow = & appPtr->localDisplay.controlWindow;
-	//HANDLE cameraHandle = appPtr->camState.cameraHandle;
+	LirenaCaptureWidgets *widgets = & appPtr->localDisplay.widgets;
+
 
 	gtk_toggle_button_set_inconsistent(run, false);
 	acquire = gtk_toggle_button_get_active(run);
@@ -1112,7 +1167,7 @@ gboolean update_run(GtkToggleButton *run, LirenaCamStreamApp* appPtr)
 			acquire = FALSE;
 			return TRUE;
 		}
-		update_raw(GTK_TOGGLE_BUTTON(controlWindow->raw), appPtr);
+		update_raw(GTK_TOGGLE_BUTTON(widgets->raw), appPtr);
 		int isColor = 0;
 		xiGetParamInt(appPtr->camState.cameraHandle, XI_PRM_IMAGE_IS_COLOR, &isColor);
 		if(isColor)
@@ -1121,25 +1176,28 @@ gboolean update_run(GtkToggleButton *run, LirenaCamStreamApp* appPtr)
         // set exposure from CLI arg
 		xiSetParamInt(appPtr->camState.cameraHandle, XI_PRM_EXPOSURE, 1000 * appPtr->config.exposure_ms);
 		gtk_adjustment_set_value(
-		    gtk_range_get_adjustment(GTK_RANGE(controlWindow->exp)), 
+		    gtk_range_get_adjustment(GTK_RANGE(widgets->exp)), 
 		    appPtr->config.exposure_ms);
 		
-		if(pthread_create(&videoThread, NULL, videoDisplay,  (void*)appPtr))// NULL))
+		if(
+			pthread_create(&appPtr->localDisplay.videoThread,
+		   		NULL, videoDisplay,  (void*)appPtr))
+		{
 			exit(1);
+		}
 	}
-	gtk_widget_set_sensitive(controlWindow->boxx, acquire);
-	gtk_widget_set_sensitive(controlWindow->boxy, acquire);
-	gtk_widget_set_sensitive(controlWindow->exp, acquire);
-	gtk_widget_set_sensitive(controlWindow->gain, acquire);
+	gtk_widget_set_sensitive(widgets->boxx, acquire);
+	gtk_widget_set_sensitive(widgets->boxy, acquire);
+	gtk_widget_set_sensitive(widgets->exp, acquire);
+	gtk_widget_set_sensitive(widgets->gain, acquire);
 	return TRUE;
 }
 
 
-gboolean start_cb(LirenaCamStreamApp* appPtr)
-//gboolean start_cb(LirenaCamStreamControlWindow* controlWindow) 
+gboolean start_cb(LirenaCaptureApp* appPtr)
 {
 	//start acquisition
-	update_run(GTK_TOGGLE_BUTTON(appPtr->localDisplay.controlWindow.run), appPtr); //controlWindow);
+	update_run(GTK_TOGGLE_BUTTON(appPtr->localDisplay.widgets.run), appPtr); //widgets);
 	return FALSE;
 }
 

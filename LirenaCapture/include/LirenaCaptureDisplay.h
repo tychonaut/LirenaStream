@@ -26,10 +26,20 @@
 
 
 
-struct LirenaCamStreamControlWindow 
+struct LirenaCaptureWidgets 
 {
-    GtkWidget *window, 
+	GdkScreen *screen;
 
+    //TODO rename stuff
+
+    // render window stuff
+	GtkWidget *videoWindow;
+
+
+    // control window stuff
+    GtkWidget *controlWindow;
+
+    GtkWidget 
         *boxmain, 
         *boxgpi, 
         *boxx, 
@@ -60,13 +70,16 @@ struct LirenaCamStreamControlWindow
 };
 
 
-struct LirenaCamStreamLocalDisplay
+
+
+
+struct LirenaCaptureDisplay
 {
-	LirenaCamStreamControlWindow controlWindow;
-	
 	pthread_t videoThread;
 	guintptr window_handle;
 
+    //TODO rename member to "widgets"
+	LirenaCaptureWidgets widgets;
 };
 
 
@@ -86,7 +99,7 @@ inline unsigned long getcurus()
 
 
 //TODO get rid of app state in this function -> diviede display and cam stuff!
-struct  LirenaCamStreamApp;
+struct  LirenaCaptureApp;
 
 struct LirenaCamera;
 
@@ -97,18 +110,31 @@ void* videoDisplay(void* appVoidPtr);
 
 GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message,  LirenaCamera* cam); //gpointer)
 
-gboolean time_handler(LirenaCamStreamApp* app);
+gboolean time_handler(LirenaCaptureApp* app);
 
 void video_widget_realize_cb(GtkWidget* widget,  LirenaCamera* cam); //gpointer)
 
-gboolean start_cb(LirenaCamStreamApp* appPtr);//(LirenaCamStreamControlWindow* ctrl);
+gboolean start_cb(LirenaCaptureApp* appPtr);
 
-gboolean close_cb(GtkWidget*, GdkEvent*, gpointer quit);
+// Messy hack to handle "shutdown app if CONTROL window is closed, 
+// but to sth ales if RENDER window is closed".
+// The original logic didn't even work in the first place...
+struct close_cb_params
+{
+	bool doShutDownApp;
+	//always non-null, but pointee kan be 0, implying thead is inactive
+	pthread_t* videoThreadPtr;
+};
+
+gboolean close_cb(GtkWidget*, GdkEvent*,  
+    //hack: need to be g_malloc'ed, then is g_free'd at and of callback.
+	close_cb_params * params);
+
 
 //TODO get rid of app state in this function -> diviede display and cam stuff!
-gboolean update_run(GtkToggleButton *run,  LirenaCamStreamApp* app);
+gboolean update_run(GtkToggleButton *run,  LirenaCaptureApp* app);
 gboolean update_show(GtkToggleButton *show,  LirenaCamera* cam); //gpointer)
-gboolean update_raw(GtkToggleButton *raw, LirenaCamStreamApp* appPtr);
+gboolean update_raw(GtkToggleButton *raw, LirenaCaptureApp* appPtr);
 
 gboolean update_gain(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
 gboolean update_exposure(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
