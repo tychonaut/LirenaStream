@@ -441,8 +441,10 @@ void* videoDisplay(void* appVoidPtr)
             " rtpstreampay ! "
             " tcpserversink "
             //" udpsink "
-            "   sync-method=next-keyframe "
-            //"   ts-offset=100000000  "
+            //"  sync-method=next-keyframe // works, but only for single-output recedeiver pipelines
+            //"   sync-method=latest " //  works, but also no batter than next-keyframe
+            "   sync-method=burst "
+            //"   ts-offset=100000000  " 
             //"   unit-format=GST_FORMAT_TIME "
             //"   burst-format=GST_FORMAT_TIME "
             "   host=%s "
