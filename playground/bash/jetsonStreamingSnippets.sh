@@ -352,8 +352,8 @@ gst-launch-1.0 -vm  \
 
 
 
-#TCP experiments:
-# receive, show video, dump both video+klv to disk and also klv-only
+#TCP experiment 1:
+# receive, show video
 # this one works, though with low fps and high latency
 GST_DEBUG=2 \
 __GL_SYNC_TO_VBLANK=0 \
@@ -365,58 +365,125 @@ gst-launch-1.0 -v -m \
   \
   rtpmp2tdepay ! \
   tsparse set-timestamps=true  ! \
-  tsdemux name=myTsDemux  \
-  \
-  myTsDemux. ! \
-    video/x-h264 ! \
-  h264parse ! \
-    video/x-h264,streaming-format=byte-stream ! \
-  queue !    \
-  avdec_h264 !   \
-  videoconvert !   \
-  xvimagesink sync=false
-
-
-
   tee name=fork_mp2ts_to_disk_and_show \
+    fork_mp2ts_to_disk_and_show. ! \
+    queue !   \
+    tsdemux name=myTsDemux  \
+    \
+      myTsDemux. ! \
+        video/x-h264 ! \
+      h264parse ! \
+        video/x-h264,streaming-format=byte-stream ! \
+      queue !    \
+      avdec_h264 !   \
+      videoconvert !   \
+      xvimagesink sync=false
+
+
+
+#TCP experiment 2:
+# receive, dump combined video+klv to disk 
+# works with VLC and streamer replay, see below
+GST_DEBUG=2 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 -v -m \
   \
-  fork_mp2ts_to_disk_and_show. ! \
-  queue !   \
-  filesink location=./tcp_rtpmp2tdepay_klv10.mpg \
+  tcpclientsrc host=192.168.0.124 port=5001  timeout=0   ! \
+   application/x-rtp-stream,encoding-name=MP2T,media=video,clock-rate=90000 ! \
+  rtpstreamdepay ! \
   \
-  fork_mp2ts_to_disk_and_show. ! \
-  queue !   \
-  tsdemux name=myTsDemux  \
+  rtpmp2tdepay ! \
+  tsparse set-timestamps=true  ! \
+  tee name=fork_mp2ts_to_disk_and_show \
+    fork_mp2ts_to_disk_and_show. ! \
+    queue !   \
+    filesink location=./tcp_mp2ts_h264_klv_30.mpg
+
+
+
+# replay video part of tcp-dumped file: 
+# works, though again some errors:
+#0:00:06.528460976 124560 0x7f9a64001a30 ERROR                  libav :0:: corrupted macroblock 19 95 (total_coeff=-1)
+#0:00:06.528514546 124560 0x7f9a64001a30 ERROR                  libav :0:: error while decoding MB 19 95
+GST_DEBUG=2 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 -vm  \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/tcp_mp2ts_h264_klv_30.mpg ! \
+  tsdemux name=mydemuxer \
   \
-  myTsDemux. ! \
+  mydemuxer. ! \
     video/x-h264 ! \
   h264parse ! \
   queue !    \
   avdec_h264 !   \
   videoconvert !   \
-  xvimagesink sync=false
+  xvimagesink 
 
+# dump KLV- part of tcp-dumped file:
+# works 
+GST_DEBUG=2 \
+gst-launch-1.0 -vm  \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/tcp_mp2ts_h264_klv_30.mpg  ! \
+  tsdemux name=mydemuxer \
   \
-  \
-  myTsDemux. ! \
+  mydemuxer. ! \
     meta/x-klv,parsed=true ! \
   queue ! \
-  filesink location=./klvOnly_from_UDP_mp2ts_10.klv
+  filesink location=./tcp_filedump_mp2ts_h264_klv_30.klv
 
 
 
 
 
-  udpsrc port=5001 buffer-size=100000000 \
-      caps='application/x-rtp-stream, , clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
-    application/x-rtp-stream,media=video,clock-rate=90000,encoding-name=MP2T ! \
-rtpjitterbuffer latency=50 ! \
-  tcpclientsrc host=192.168.0.124 port=5001  timeout=0 ! \
-tcpserversrc host=192.168.0.124 port=5001  timeout=0 ! \ 
-do-timestamp=true
+
+#TCP experiment 3:
+# receive TCP, dump KLV directly to  file
+# 
+GST_DEBUG=2 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 -v -m \
+  \
+  tcpclientsrc host=192.168.0.124 port=5001  timeout=0   ! \
+   application/x-rtp-stream,encoding-name=MP2T,media=video,clock-rate=90000 ! \
+  rtpstreamdepay ! \
+  \
+  rtpmp2tdepay ! \
+  tsparse set-timestamps=true  ! \
+  tee name=fork_mp2ts_to_disk_and_show \
+    \
+    fork_mp2ts_to_disk_and_show. ! \
+      queue max-size-time=5000000000 !   \
+      tsdemux name=myTsDemux  \
+      \
+        myTsDemux. ! \
+            video/x-h264 ! \
+          h264parse ! \
+            video/x-h264! \
+          queue max-size-time=5000000000 !   \
+          avdec_h264 !   \
+          videoconvert !   \
+          xvimagesink sync=false  
+#only works for single-output
+
+\
+    \
+    fork_mp2ts_to_disk_and_show. ! \
+      queue max-size-time=5000000000 !   \
+      filesink location=./tcp_mp2ts_h264_klv_30.mpg
 
 
-xvimagesink sync=false  \
+
+    \
+      myTsDemux. ! \
+        meta/x-klv,parsed=true ! \
+      queue ! \
+      filesink location=./tcp_streamdump_mp2ts_h264_klv_30.klv
+
+
+ video/x-h264,streaming-format=byte-stream ! \
+sync=false 
+
+
 
 
 
