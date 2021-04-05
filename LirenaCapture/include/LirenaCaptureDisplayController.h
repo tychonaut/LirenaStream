@@ -25,6 +25,18 @@
 
 
 
+// hack from Ximea as long as no good GstClock integrated...
+inline unsigned long getcurus() 
+{
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	return now.tv_sec * 1000000 + now.tv_usec;
+}
+
+
+
+
+
 
 struct LirenaCaptureWidgets 
 {
@@ -73,10 +85,10 @@ struct LirenaCaptureWidgets
 
 
 
-struct LirenaCaptureDisplay
+struct LirenaCaptureDisplayController
 {
 	pthread_t videoThread;
-	guintptr window_handle;
+	guintptr drawableWindow_handle;
 
     //TODO rename member to "widgets"
 	LirenaCaptureWidgets widgets;
@@ -87,32 +99,30 @@ struct LirenaCaptureDisplay
 
 
 
-// hack from Ximea as long as no good GstClock integrated...
-inline unsigned long getcurus() 
-{
-	struct timeval now;
-	gettimeofday(&now, NULL);
-	return now.tv_sec * 1000000 + now.tv_usec;
-}
 
 
 
 
-//TODO get rid of app state in this function -> diviede display and cam stuff!
-struct  LirenaCaptureApp;
-
+// Forward types for pointer params
+struct LirenaCaptureApp;
 struct LirenaCamera;
 
 
 
-//TODO get rid of app state in this function -> diviede display and cam stuff!
+//TODO outsource app state in this function -> diviede display and cam stuff!
 void* videoDisplay(void* appVoidPtr);
 
-GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message,  LirenaCamera* cam); //gpointer)
 
-gboolean time_handler(LirenaCaptureApp* app);
 
-void video_widget_realize_cb(GtkWidget* widget,  LirenaCamera* cam); //gpointer)
+
+GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, 
+    LirenaCaptureDisplayController* displayCtrl);  //LirenaCamera* cam); //gpointer)
+
+gboolean camTriggerHandler(LirenaCaptureApp* app);
+
+void video_widget_realize_cb(GtkWidget *widget, 
+	LirenaCaptureDisplayController* displayCtrl);
+
 
 gboolean start_cb(LirenaCaptureApp* appPtr);
 
@@ -129,6 +139,9 @@ struct close_cb_params
 gboolean close_cb(GtkWidget*, GdkEvent*,  
     //hack: need to be g_malloc'ed, then is g_free'd at and of callback.
 	close_cb_params * params);
+
+
+
 
 
 //TODO get rid of app state in this function -> diviede display and cam stuff!
