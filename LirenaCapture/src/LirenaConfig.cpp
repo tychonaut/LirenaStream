@@ -19,10 +19,16 @@ static char args_doc[] = "IP Port";
 
 //  The options we understand. 
 static struct argp_option options[] = {
-  //{"verbose",  'v', 0,      0,  "Produce verbose output" },
-  {"localdisplay",  'l', 0,      0,  "display video locally, (not just stream per UDP)" },
-  {"output",   'o', "FILE", 0, "Dump encoded stream to disk" }, //OPTION_ARG_OPTIONAL
-  {"exposure", 'e', "time_ms", 0, "Exposure time in milliseconds" },
+  //{"verbose",     'v', 0,         0,  
+  //  "Produce verbose output" },
+  {"localdisplay",  'l', 0,         0, 
+    "For debugging :display video locally, (not just stream per UDP)" },
+  {"output",        'o', "FILE",    0, 
+    "For debugging: Dump encoded stream to disk" }, //OPTION_ARG_OPTIONAL
+  {"useTCP",        't', "0",       0, 
+    "Experimental (may not work!): Use TCP instead of UDP " }, //OPTION_ARG_OPTIONAL
+  {"exposure",      'e', "time_ms", 0, 
+    "Exposure time in milliseconds" },
   { 0 }
 };
 
@@ -39,17 +45,6 @@ parse_opt (int key, char *arg, struct argp_state *state)
 
   switch (key)
     {
-    case 'l':
-      myArgs->doLocalDisplay = true;
-      break;
-    case 'o':
-      myArgs->output_file = arg;
-      printf("%s", "Warning: local dump to disk currently not supported.\n");
-      break;
-    case 'e':
-      myArgs->exposure_ms = atoi(arg);
-      break;
-
     case ARGP_KEY_ARG:
       if (state->arg_num >= 2)
       {
@@ -64,6 +59,23 @@ parse_opt (int key, char *arg, struct argp_state *state)
       {
         myArgs->port = arg;
       }
+      break;
+
+    case 'l':
+      myArgs->doLocalDisplay = true;
+      break;
+    case 'o':
+      myArgs->outputFile = arg;
+      printf("%s", "Warning: local dump to disk currently not supported.\n");
+      break;
+    case 't':
+      myArgs->useTCP = true;
+      break;
+
+    
+
+    case 'e':
+      myArgs->exposure_ms = atoi(arg);
       break;
 
     case ARGP_KEY_END:
@@ -91,23 +103,30 @@ LirenaCamStreamConfig parseArguments(int argc, char **argv)
 	LirenaCamStreamConfig ret;
    
     // Default values.
-    ret.doLocalDisplay = false;
-    ret.output_file = nullptr;
-    ret.exposure_ms = 30;
     ret.IP = "192.168.0.169";
     ret.port = "5001";
-
+    ret.doLocalDisplay = false;
+    ret.outputFile = nullptr;
+    ret.useTCP = false;
+    ret.exposure_ms = 30;
+    
     /* Parse our arguments; every option seen by parse_opt will
        be reflected in arguments. */
     argp_parse (&argp, argc, argv, 0, 0, &ret);
 
-    printf ("IP = %s\nPort = %s\nExposure = %i\n"
-            "OUTPUT_FILE = %s\ndisplay locally = %s\n",
+    printf ("IP = %s\n"
+            "Port = %s\n"
+            "Exposure = %i\n"
+            "display locally = %s\n"
+            "use TCP instead UDP = %s\n"
+            "OUTPUT_FILE = %s\n",
             ret.IP, 
             ret.port,
             ret.exposure_ms,
-            ret.output_file ? ret.output_file : "-none-",
-            ret.doLocalDisplay ? "yes" : "no");
+            ret.doLocalDisplay ? "yes" : "no",
+            ret.useTCP ? "yes" : "no",
+            ret.outputFile ? ret.outputFile : "-none-"
+    );
 
 	return ret;
 }

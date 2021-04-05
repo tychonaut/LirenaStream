@@ -2,14 +2,22 @@
     // Use IntelliSense to learn about possible attributes.
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    //
+    // own comments:
+    // "--localdisplay"
     "version": "0.2.0",
     "configurations": [
         {
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/builddir/ximeaJetsonStream",
-            "args": ["192.168.0.169", "5001", "--exposure=25", "--localdisplay"],
+            "program": "${workspaceFolder}/builddir/lirenaCapture",
+            "args": [
+                "192.168.0.169", 
+                "5001", 
+                "--exposure=30", 
+                "--localdisplay",
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [{"name":"GST_DEBUG", "value":"0,appsrc:0,mpegtsmux:0"},

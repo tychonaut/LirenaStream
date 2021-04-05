@@ -75,8 +75,6 @@ struct LirenaCamStreamApp
 
 
 
-
-
 //----------------------------------------------------------------------------
 int main(int argc, char **argv);
 
@@ -355,6 +353,9 @@ void* videoDisplay(void* appVoidPtr)
       MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH]; 
     gchar gstreamerForkString_enc_to_disk_and_UDP[
       MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
+	gchar gStreamerNetworkTransmissionSnippet[
+		MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
+	
       
     // init snippets to empty string:
     g_snprintf(gstreamerForkString_raw_to_show_and_enc,
@@ -363,6 +364,10 @@ void* videoDisplay(void* appVoidPtr)
     g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
                (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
                 "%s",""); 
+    g_snprintf(gStreamerNetworkTransmissionSnippet,
+               (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+                "%s",""); 
+				
       
     if(app->config.doLocalDisplay)
     {
@@ -382,7 +387,7 @@ void* videoDisplay(void* appVoidPtr)
         );
     }
     
-    if(app->config.output_file)
+    if(app->config.outputFile)
     {
         /*
           Inject dump-to-disk:
@@ -401,8 +406,45 @@ void* videoDisplay(void* appVoidPtr)
             " fork_enc_to_disk_and_UDP. ! "
             " queue ! "
             ,
-            app->config.output_file);
+            app->config.outputFile);
     }
+
+    if(app->config.useTCP)
+    {
+		//TCP
+		GST_WARNING("%s", "Using TCP instead of UDP: "
+			"This is experimental an my not work!");
+
+        g_snprintf(gStreamerNetworkTransmissionSnippet,
+            (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+            " rtpstreampay ! " // wrap RTP stuff another time for TCP ... (?)
+            " tcpserversink "
+            "   host=%s "
+            "   port=%s "
+            "   sync-method=burst "
+            //"  sync-method=next-keyframe // works, but only for single-output recedeiver pipelines
+            //"   sync-method=latest " //  works, but also no batter than next-keyframe
+            ,
+ 	        app->config.IP,
+    	    app->config.port 
+		);
+	}
+	else 
+	{
+		//UDP
+        g_snprintf(gStreamerNetworkTransmissionSnippet,
+            (gulong) MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+            " udpsink "
+            "   host=%s"
+            "   port=%s"
+            "   sync=false "
+            ,
+ 	        app->config.IP,
+    	    app->config.port 
+		);
+	}
+    //gStreamerNetworkTransmissionSnippet
+
     
 	/*
 	    Full pipeline (stuff in brackets is optional):
@@ -415,49 +457,50 @@ void* videoDisplay(void* appVoidPtr)
     */	
    g_snprintf(gstreamerPipelineString,
         (gulong) MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
+		    // Mpeg2TS muxer:
+		    //" mpegtsmux name=mp2ts_muxer alignment=0 "
+			//"" 
+			// KLV appsrc to  muxer:
             " appsrc format=GST_FORMAT_TIME is-live=TRUE name=klvSrc ! "
-            "  meta/x-klv, parsed=true ! "
-            //" queue ! "
-            " mp2ts_muxer. "
+            "   meta/x-klv, parsed=true ! "
+            " mpegtsmux name=mp2ts_muxer alignment=0 "
+			//"  mpegtsmux."
             ""
-            " appsrc format=GST_FORMAT_TIME is-live=TRUE name=streamViewer ! "                         
+			// Video appsrc, encode h264, to muxer:
+            " appsrc format=GST_FORMAT_TIME is-live=TRUE name=streamViewer ! "
+			"" 
+			//{ software debayering by GStreamer itself
+			//: TODO outsource to Cuda&OpenCV
 	        "   video/x-bayer ! "
             " bayer2rgb ! "
             "   video/x-raw, format=(string)BGRx ! "
             " videoconvert ! "
-	        " %s "          // optional fork to local display
+	        //} 
+
+			" %s "          // optional fork to local display
             " queue ! "
             " nvvidconv ! "
             " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "                
-            " h264parse  config-interval=-1 disable-passthrough=true ! "
+            " h264parse  disable-passthrough=true ! " //config-interval=-1  <--may be required in TCP?...
             " mp2ts_muxer. "
             ""
-            " mpegtsmux name=mp2ts_muxer alignment=0 ! "
-            " tsparse ! " //set-timestamps=true ! " // pcr-pid=-1 TODO what does set-timestamps=true do?
-            " queue max-size-time=30000000000 max-size-bytes=0 max-size-buffers=0 ! "
-            " %s "          // optional fork to dump-to-disk
-            " rtpmp2tpay ! " //" rtph264pay ! "
-            
-            " rtpstreampay ! "
-            " tcpserversink "
-            //" udpsink "
-            //"  sync-method=next-keyframe // works, but only for single-output recedeiver pipelines
-            //"   sync-method=latest " //  works, but also no batter than next-keyframe
-            "   sync-method=burst "
-            //"   ts-offset=100000000  " 
-            //"   unit-format=GST_FORMAT_TIME "
-            //"   burst-format=GST_FORMAT_TIME "
-            "   host=%s "
-            "   port=%s "
-            //"   sync=false "
+			// prepare muxed stream for network transmission:
+            " mp2ts_muxer.! "
+            "   tsparse ! "
+            "   queue max-size-time=30000000000 max-size-bytes=0 max-size-buffers=0 ! "
+            "   %s "          // optional fork to dump-to-disk
+            "   rtpmp2tpay ! " 
+            ""
+            // send over network via UDP or optionally TCP
+			" %s "
         ,
         gstreamerForkString_raw_to_show_and_enc,
         gstreamerForkString_enc_to_disk_and_UDP,
-        app->config.IP,
-        app->config.port 
+        gStreamerNetworkTransmissionSnippet
     );
 	     
-   	GST_DEBUG("HERE MY PIPELINE: %s",gstreamerPipelineString);
+   	GST_INFO("HERE MY PIPELINE: %s",gstreamerPipelineString);
+	sleep(1);
        	
     pipeline = gst_parse_launch(
       	         gstreamerPipelineString,
