@@ -1,5 +1,5 @@
 
-#include "LirenaCaptureDisplay.h"
+#include "LirenaCaptureDisplayController.h"
 #include "LirenaConfig.h"
 
 // for later:

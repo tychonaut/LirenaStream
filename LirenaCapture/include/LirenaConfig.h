@@ -9,7 +9,7 @@
 #include <argp.h> // CLI arguments parsing
 
 
-struct LirenaCamStreamConfig
+struct LirenaConfig
 {
   // host and IP are mandatory params; host's IP has different
   // meaning in TCP than in UDP.
@@ -51,7 +51,7 @@ struct LirenaCamStreamConfig
 };
 
 //{ forwards:
-LirenaCamStreamConfig parseArguments(int argc, char **argv);
+LirenaConfig parseArguments(int argc, char **argv);
 //}
 
 
