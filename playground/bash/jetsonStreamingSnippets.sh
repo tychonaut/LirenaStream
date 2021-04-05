@@ -676,10 +676,11 @@ gst-launch-1.0 -e \
 #      -  have to disaple local display and wrtie to disc on sender
 #         (those hacky theads may hickup the UDP stuff)
 # even then, stuff not always works!
-GST_DEBUG=4 \
+#  -v -m 
+GST_DEBUG=0 \
 __GL_SYNC_TO_VBLANK=0 \
-gst-launch-1.0 -v -m \
-  udpsrc port=5001 buffer-size=100000000 \
+gst-launch-1.0
+  udpsrc port=5001  \
       caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
   rtpjitterbuffer latency=50 ! \
   rtpmp2tdepay ! \
