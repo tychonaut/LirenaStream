@@ -17,7 +17,8 @@
 
 //----------------------------------------------------------------------------
 // Type forwards:
-struct LirenaCaptureApp;
+
+//struct LirenaCaptureApp;
 //struct LirenaCamera;
 //struct LirenaCaptureDisplay;
 
@@ -36,6 +37,9 @@ struct LirenaCaptureApp
 //----------------------------------------------------------------------------
 int main(int argc, char **argv);
 
+
+
+
 // ----------------------------------------------------------------------------
 //{ Global variables; TODO rename, organize, replace by local aggregates
 
@@ -49,7 +53,7 @@ int main(int argc, char **argv);
 
 BOOLEAN acquire, quitting, render = TRUE;
 
-int maxcx, maxcy, roix0, roiy0, roicx, roicy;
+// int maxcx, maxcy, roix0, roiy0, roicx, roicy;
 
 //}
 
@@ -405,7 +409,7 @@ void *videoDisplay(void *appVoidPtr)
 				   " udpsink "
 				   "   host=%s"
 				   "   port=%s"
-				   "   sync=false ",
+				   "   sync=true ", // sync=false
 				   app->config.IP,
 				   app->config.port);
 	}
@@ -921,55 +925,58 @@ gboolean camTriggerHandler(LirenaCaptureApp *app)
 
 gboolean update_x0(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
 {
-	roix0 = gtk_adjustment_get_value(adj);
-	if (roicx + roix0 > maxcx)
+	
+	cam->roix0 = gtk_adjustment_get_value(adj);
+	if (cam->roicx + cam->roix0 > cam->maxcx)
 	{
-		roix0 = maxcx - roicx;
-		gtk_adjustment_set_value(adj, roix0);
+		cam->roix0 = cam->maxcx - cam->roicx;
+		gtk_adjustment_set_value(adj, cam->roix0);
 	}
-	xiSetParamInt(cam->cameraHandle, XI_PRM_OFFSET_X, roix0);
+	xiSetParamInt(cam->cameraHandle, XI_PRM_OFFSET_X, cam->roix0);
 	return TRUE;
 }
 
 gboolean update_y0(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
 {
-	roiy0 = gtk_adjustment_get_value(adj);
-	if (roicy + roiy0 > maxcy)
+	cam->roiy0 = gtk_adjustment_get_value(adj);
+	if (cam->roicy + cam->roiy0 > cam->maxcy)
 	{
-		roiy0 = maxcy - roicy;
-		gtk_adjustment_set_value(adj, roiy0);
+		cam->roiy0 = cam->maxcy - cam->roicy;
+		gtk_adjustment_set_value(adj, cam->roiy0);
 	}
-	xiSetParamInt(cam->cameraHandle, XI_PRM_OFFSET_Y, roiy0);
+	xiSetParamInt(cam->cameraHandle, XI_PRM_OFFSET_Y, cam->roiy0);
 	return TRUE;
 }
 
 gboolean update_cx(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
 {
-	roicx = gtk_adjustment_get_value(adj);
-	if (roix0 + roicx > maxcx)
+	cam->roicx = gtk_adjustment_get_value(adj);
+	if (cam->roix0 + cam->roicx > cam->maxcx)
 	{
-		roicx = maxcx - roix0;
-		gtk_adjustment_set_value(adj, roicx);
+		cam->roicx = cam->maxcx - cam->roix0;
+		gtk_adjustment_set_value(adj, cam->roicx);
 	}
-	xiSetParamInt(cam->cameraHandle, XI_PRM_WIDTH, roicx);
+	xiSetParamInt(cam->cameraHandle, XI_PRM_WIDTH, cam->roicx);
 	return TRUE;
 }
 
 gboolean update_cy(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
 {
-	roicy = gtk_adjustment_get_value(adj);
-	if (roiy0 + roicy > maxcy)
+	cam->roicy = gtk_adjustment_get_value(adj);
+	if (cam->roiy0 + cam->roicy > cam->maxcy)
 	{
-		roicy = maxcy - roiy0;
-		gtk_adjustment_set_value(adj, roicy);
+		cam->roicy = cam->maxcy - cam->roiy0;
+		gtk_adjustment_set_value(adj, cam->roicy);
 	}
-	xiSetParamInt(cam->cameraHandle, XI_PRM_HEIGHT, roicy);
+	xiSetParamInt(cam->cameraHandle, XI_PRM_HEIGHT, cam->roicy);
 	return TRUE;
 }
 
 gboolean update_exposure(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
 {
-	xiSetParamInt(cam->cameraHandle, XI_PRM_EXPOSURE, 1000 * gtk_adjustment_get_value(adj));
+	xiSetParamInt(cam->cameraHandle, XI_PRM_EXPOSURE, 
+		1000 * gtk_adjustment_get_value(adj));
+
 	return TRUE;
 }
 
@@ -990,28 +997,41 @@ gboolean update_raw(GtkToggleButton *raw, LirenaCaptureApp *appPtr)
 		xiSetParamInt(cameraHandle, XI_PRM_IMAGE_DATA_FORMAT, gtk_toggle_button_get_active(raw) ? XI_RAW8 : XI_RGB32);
 		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
 		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
-		xiGetParamInt(cameraHandle, XI_PRM_WIDTH XI_PRM_INFO_MAX, &maxcx);
-		xiGetParamInt(cameraHandle, XI_PRM_HEIGHT XI_PRM_INFO_MAX, &maxcy);
-		roicx = maxcx;
-		roicy = maxcy;
-		roix0 = 0;
-		roiy0 = 0;
+		xiGetParamInt(cameraHandle, XI_PRM_WIDTH XI_PRM_INFO_MAX, &appPtr->camState.maxcx);
+		xiGetParamInt(cameraHandle, XI_PRM_HEIGHT XI_PRM_INFO_MAX, &appPtr->camState.maxcy);
+		appPtr->camState.roicx = appPtr->camState.maxcx;
+		appPtr->camState.roicy = appPtr->camState.maxcy;
+		appPtr->camState.roix0 = 0;
+		appPtr->camState.roiy0 = 0;
 
 		float midgain = (maxgain + mingain) * 0.5f;
 
 		//gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(widgets->gain)), mingain, mingain, maxgain, 0.1, 1, 0);
-		gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(widgets->gain)), midgain, mingain, maxgain, 0.1, 1, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(widgets->x0)), roix0, 0, maxcx - 4, 2, 20, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(widgets->y0)), roiy0, 0, maxcy - 2, 2, 20, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(widgets->cx)), roicx, 4, maxcx, 4, 20, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(widgets->cy)), roicy, 2, maxcy, 2, 20, 0);
+		gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(widgets->gain)),
+			midgain, mingain, maxgain, 0.1, 1, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(widgets->x0)), 
+			appPtr->camState.roix0, 
+			0, appPtr->camState.maxcx - 4, 2, 20, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(widgets->y0)), 
+			appPtr->camState.roiy0, 0, 
+			appPtr->camState.maxcy - 2, 2, 20, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(widgets->cx)), 
+			appPtr->camState.roicx, 4,
+			appPtr->camState.maxcx, 4, 20, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(widgets->cy)), 
+			appPtr->camState.roicy, 2, 
+			appPtr->camState.maxcy, 2, 20, 0);
 
 		//xiSetParamFloat(cameraHandle, XI_PRM_GAIN, mingain);
 		xiSetParamFloat(cameraHandle, XI_PRM_GAIN, midgain);
-		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_X, roix0);
-		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_Y, roiy0);
-		xiSetParamInt(cameraHandle, XI_PRM_WIDTH, roicx);
-		xiSetParamInt(cameraHandle, XI_PRM_HEIGHT, roicy);
+		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_X, appPtr->camState.roix0);
+		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_Y, appPtr->camState.roiy0);
+		xiSetParamInt(cameraHandle, XI_PRM_WIDTH,    appPtr->camState.roicx);
+		xiSetParamInt(cameraHandle, XI_PRM_HEIGHT, appPtr->camState.roicy);
 		//exposure doesn't seem to be affected by format change
 	}
 	return TRUE;
