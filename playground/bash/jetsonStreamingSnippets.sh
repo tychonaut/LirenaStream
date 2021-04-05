@@ -631,7 +631,6 @@ gst-launch-1.0 -e \
 
 # this one works at least for LOCAL dump: need DIFFERENT demuxer instances...
 # .. tsdemux seems to have several big issue with  "synchronous klv"...
-#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 GST_DEBUG=4 \
 gst-launch-1.0 -e \
   filesrc location=/home/markus/devel/streaming/LirenaStream/playground/localOutput_001.mpg ! \
@@ -660,7 +659,6 @@ gst-launch-1.0 -e \
     myT2. ! \
       queue ! \
     filesink location=localOutput_004.klv sync=true async=true 
-#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
@@ -668,10 +666,15 @@ gst-launch-1.0 -e \
 ################################################################################
 ################################################################################
 ################################################################################
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 #reverting to old udp-receive without all the "corrupted"-flags:
 # works with video replay, klv dum as fake src and klv dump to file!
 # receive, show video, dump both video+klv to disk and also klv-only
-# works; have to start receiver before sender, and also END receiver before sender!
+# works; 
+# BUT: - have to start receiver before sender
+#      - seems to also have to END receiver before sender!
+#      -  have to disaple local display and wrtie to disc on sender
+#         (those hacky theads may hickup the UDP stuff)
 # even then, stuff not always works!
 GST_DEBUG=4 \
 __GL_SYNC_TO_VBLANK=0 \
@@ -684,7 +687,7 @@ gst-launch-1.0 -v -m \
   \
   fork_mp2ts_to_disk_and_show. ! \
   queue !   \
-  filesink location=./remoteOutput_009.mpg \
+  filesink location=./remoteOutput_010.mpg \
   \
   fork_mp2ts_to_disk_and_show. ! \
   queue !   \
@@ -701,7 +704,7 @@ gst-launch-1.0 -v -m \
   myTsDemux. ! \
     meta/x-klv,parsed=true ! \
   queue ! \
-  filesink location=./fromUdp_remoteOutput_009.klv
+  filesink location=./fromUdp_remoteOutput_010.klv
 
 
 
@@ -711,7 +714,7 @@ gst-launch-1.0 -v -m \
 GST_DEBUG=4 \
 __GL_SYNC_TO_VBLANK=0 \
 gst-launch-1.0  \
-  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/remoteOutput_009.mpg ! \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/remoteOutput_010.mpg ! \
   tee name=myT1 \
   \
   myT1. ! \
@@ -735,12 +738,16 @@ gst-launch-1.0  \
     \
     myT2. ! \
       queue ! \
-    filesink location=fromFile_remoteOutput_009.klv sync=true async=true
+    filesink location=fromFile_remoteOutput_010.klv sync=true async=true
 
 
 
 
 
+# frame counting :
+# https://stackoverflow.com/questions/2017843/fetch-frame-count-with-ffmpeg
+ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of default=nokey=1:noprint_wrappers=1 remoteOutput_009.mpg
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
