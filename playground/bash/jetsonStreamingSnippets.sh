@@ -197,6 +197,7 @@ gst-launch-1.0 -v -m \
 
 # Receive mp2ts per udp, dump directly to disk and show on screen:
 # works, though playback of mpg file that contains KLV must be with VLC 
+# or hand-built bash gstreamer pipeline
 # (playbin cannot decode/ignore it for some reason)
 gst-launch-1.0 -v -m \
   udpsrc port=5001 caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
@@ -292,7 +293,7 @@ gst-launch-1.0 -v -m \
 
 # replay video and extract KLV data 
 # from previously dumped mp2ts video+KLV-file to KLV-file
-# works, but  in the end, corupted stuff is reported:
+# worked, but  in the end, corrupted stuff is reported:
 # 0:00:16.246408611 98634 0x7f0ce4002350 ERROR                  libav :0:: corrupted macroblock 7 96 (total_coeff=-1)
 # 0:00:16.246463961 98634 0x7f0ce4002350 ERROR                  libav :0:: error while decoding MB 7 96
 # FAILS now, although they once worked, and still work for each demuxed stream (video and KLV) alone
@@ -348,10 +349,7 @@ gst-launch-1.0 -vm  \
 
 
 
-###----------------------------------------
-
-
-
+########################################----------------------------------------
 #TCP experiment 1:
 # receive, show video
 # this one works, though with low fps and high latency
@@ -437,8 +435,7 @@ gst-launch-1.0 -vm  \
 
 
 #TCP experiment 3:
-# receive TCP, dump KLV directly to  file
-# 
+# fail
 GST_DEBUG=2 \
 __GL_SYNC_TO_VBLANK=0 \
 gst-launch-1.0 -v -m \
@@ -448,7 +445,7 @@ gst-launch-1.0 -v -m \
   rtpstreamdepay ! \
   \
   rtpmp2tdepay ! \
-  tsparse set-timestamps=true  ! \
+  tsparse parse-private-sections=true set-timestamps=true  ! \
   tee name=fork_mp2ts_to_disk_and_show \
     \
     fork_mp2ts_to_disk_and_show. ! \
@@ -457,21 +454,18 @@ gst-launch-1.0 -v -m \
       \
         myTsDemux. ! \
             video/x-h264 ! \
-          h264parse ! \
+          h264parse disable-passthrough=true ! \
             video/x-h264! \
           queue max-size-time=5000000000 !   \
-          avdec_h264 !   \
+          avdec_h264 output-corrupt=true !   \
           videoconvert !   \
-          xvimagesink sync=false  
-#only works for single-output
-
-\
+          xvimagesink sync=false  \
     \
     fork_mp2ts_to_disk_and_show. ! \
-      queue max-size-time=5000000000 !   \
       filesink location=./tcp_mp2ts_h264_klv_30.mpg
 
 
+      queue max-size-time=5000000000 !   \
 
     \
       myTsDemux. ! \
@@ -482,12 +476,266 @@ gst-launch-1.0 -v -m \
 
  video/x-h264,streaming-format=byte-stream ! \
 sync=false 
+ h264parse disable-passthrough=true config-interval=-1 ! \
 
 
 
 
 
+################################################################################
+#UDP revisited after discovering  avdec_h264's "output-corrupt=true" property
+GST_DEBUG=2 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 -v -m \
+  udpsrc port=5001 buffer-size=100000000 \
+      caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
+  rtpjitterbuffer \
+    latency=400  ! \
+  rtpmp2tdepay ! \
+  tsparse parse-private-sections=true set-timestamps=true  ! \
+  tee name=fork_mp2ts_to_disk_and_show \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  filesink location=./remoteOutput_001.mpg \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  tsdemux parse-private-sections=true name=myTsDemux  \
+  \
+  myTsDemux. ! \
+    video/x-h264 ! \
+  h264parse disable-passthrough=true ! \
+  queue !    \
+  avdec_h264  output-corrupt=true !   \
+  videoconvert !   \
+  xvimagesink sync=false  \
+  \
+  myTsDemux. ! \
+    meta/x-klv,parsed=true ! \
+  queue ! \
+  filesink location=./remoteOutput_001.klv
 
+
+
+
+# try to replay dumped file, vid only
+GST_DEBUG=2 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 -vm  \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/localOutput_001.mpg ! \
+  tsparse parse-private-sections=true set-timestamps=true  ! \
+  tsdemux parse-private-sections=true name=mydemuxer \
+  \
+  mydemuxer. ! \
+    video/x-h264 ! \
+  h264parse disable-passthrough=true ! \
+  queue !    \
+  avdec_h264  output-corrupt=true !   \
+  videoconvert !   \
+  xvimagesink 
+
+# try to replay dumped file, klv only
+GST_DEBUG=2 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 -vm  \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/localOutput_001.mpg ! \
+  tsparse parse-private-sections=true set-timestamps=true  ! \
+  tsdemux parse-private-sections=true name=mydemuxer \
+  \
+  mydemuxer. ! \
+    meta/x-klv,parsed=true ! \
+  queue ! \
+  filesink location=./fromlocalOutput_001.klv
+
+
+# try to replay dumped file, both vid and klv
+GST_DEBUG=2,tsparse:4,tsdemux:4 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 \
+  filesrc \
+    location=/home/markus/devel/streaming/LirenaStream/playground/localOutput_001.mpg ! \
+  tsdemux parse-private-sections=true name=mydemuxer \
+  \
+  mydemuxer. ! \
+    meta/x-klv,parsed=true ! \
+  queue ! \
+  filesink location=./fromDumpedFile_localOutput_001.klv \
+  \
+  mydemuxer. ! \
+    video/x-h264 ! \
+  h264parse disable-passthrough=true ! \
+  queue !    \
+  avdec_h264  output-corrupt=true !   \
+  videoconvert !   \
+  xvimagesink 
+
+
+#next try..
+# try to replay dumped file, both vid and klv
+GST_DEBUG=2,tsparse:4,tsdemux:4 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 \
+  filesrc \
+    location=/home/markus/devel/streaming/LirenaStream/playground/localOutput_001.mpg ! \
+  tsdemux name=mydemuxer \
+  \
+  mydemuxer. ! \
+    meta/x-klv,parsed=true ! \
+  queue ! \
+  filesink location=./fromDumpedFile_localOutput_001.klv \
+  \
+  mydemuxer. ! \
+    video/x-h264 ! \
+  h264parse ! \
+  queue !    \
+  avdec_h264 !   \
+  videoconvert !   \
+  xvimagesink 
+
+
+GST_DEBUG=2 \
+gst-launch-1.0 -vm  \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/localOutput_001.mpg ! \
+  tsparse  set-timestamps=true ! \
+  tsdemux name=mydemuxer parse-private-sections=true \
+  \
+  mydemuxer. ! \
+  h264parse ! \
+  fakesink sync=false async=true \
+  \
+  mydemuxer. ! \
+    meta/x-klv ! \
+  fakesink sync=false async=true
+
+
+GST_DEBUG=4 \
+gst-launch-1.0 -e \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/localOutput_001.mpg ! \
+  tsparse  set-timestamps=true ! \
+  tsdemux name=demux \
+  \
+  demux. ! \
+  h264parse ! \
+  queue ! \
+    'video/x-h264, stream-format=byte-stream, alignment=au' !  \
+  avdec_h264 ! \
+  xvimagesink sync=false async=true \
+  \
+  demux. ! \
+    'meta/x-klv' ! \
+  queue ! \
+  filesink location=localOutput_003.klv sync=false async=true \
+
+
+
+# this one works at least for LOCAL dump: need DIFFERENT demuxer instances...
+# .. tsdemux seems to have several big issue with  "synchronous klv"...
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+GST_DEBUG=4 \
+gst-launch-1.0 -e \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/localOutput_001.mpg ! \
+  tsparse ! \
+  tee name=myT1 \
+  \
+  myT1. ! \
+    queue ! \
+    tsdemux ! \
+    h264parse ! \
+    queue ! \
+      'video/x-h264' ! \
+    avdec_h264 ! \
+    xvimagesink  sync=true async=true \
+  \
+  myT1. ! \
+    queue ! \
+    tsdemux ! \
+      'meta/x-klv' ! \
+    tee name=myT2 \
+    \
+    myT2. ! \
+      queue ! \
+      fakesink dump=true sync=true async=true \
+    \
+    myT2. ! \
+      queue ! \
+    filesink location=localOutput_004.klv sync=true async=true 
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+################################################################################
+################################################################################
+################################################################################
+#reverting to old udp-receive without all the "corrupted"-flags:
+# works with video replay, klv dum as fake src and klv dump to file!
+# receive, show video, dump both video+klv to disk and also klv-only
+# works; have to start receiver before sender, and also END receiver before sender!
+# even then, stuff not always works!
+GST_DEBUG=4 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0 -v -m \
+  udpsrc port=5001 buffer-size=100000000 \
+      caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
+  rtpjitterbuffer latency=50 ! \
+  rtpmp2tdepay ! \
+  tee name=fork_mp2ts_to_disk_and_show \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  filesink location=./remoteOutput_009.mpg \
+  \
+  fork_mp2ts_to_disk_and_show. ! \
+  queue !   \
+  tsdemux name=myTsDemux  \
+  \
+  myTsDemux. ! \
+    video/x-h264 ! \
+  h264parse ! \
+  queue !    \
+  avdec_h264 !   \
+  videoconvert !   \
+  xvimagesink sync=false async=true \
+  \
+  myTsDemux. ! \
+    meta/x-klv,parsed=true ! \
+  queue ! \
+  filesink location=./fromUdp_remoteOutput_009.klv
+
+
+
+
+#trying to adapt to corrupted remote dump:
+# seems to work relatively stable now, though no idea why (and why not before)
+GST_DEBUG=4 \
+__GL_SYNC_TO_VBLANK=0 \
+gst-launch-1.0  \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/remoteOutput_009.mpg ! \
+  tee name=myT1 \
+  \
+  myT1. ! \
+    queue ! \
+    tsdemux ! \
+      'video/x-h264' ! \
+    h264parse ! \
+    avdec_h264 output-corrupt=false  !   \
+    videoconvert !  \
+    xvimagesink   sync=true async=true \
+  \
+  myT1. ! \
+    queue ! \
+    tsdemux ! \
+      'meta/x-klv' ! \
+    tee name=myT2 \
+    \
+    myT2. ! \
+      queue ! \
+      fakesink dump=true sync=true async=true \
+    \
+    myT2. ! \
+      queue ! \
+    filesink location=fromFile_remoteOutput_009.klv sync=true async=true
 
 
 
