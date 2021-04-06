@@ -131,9 +131,10 @@ struct LirenaXimeaStreamer
 {
 	LirenaConfig const * configPtr;
 
-	LirenaXimeaStreamer_CameraParams camParams;
-    pthread_t captureThread;
+	LirenaXimeaStreamer_CameraParams camParams; //camParams;
 
+    pthread_t captureThread;
+	bool captureThreadIsRunning = false;
 
 	// for asynchronous processing of CUDA stuff: has to be initialized
     //cv::cuda::Stream cudaDemoisaicStream;
@@ -161,15 +162,24 @@ struct LirenaXimeaStreamer
 //-----------------------------------------------------------------------------
 // function interface
 
-LirenaXimeaStreamer * 
-lirena_XimeaStreamer_create(
-	LirenaConfig const * configPtr);
+// LirenaXimeaStreamer * 
+// lirena_XimeaStreamer_create(
+// 	LirenaConfig const * configPtr);
 
-void 
-lirena_XimeaStreamer_destroy(
-	LirenaXimeaStreamer * streamer);
+// void 
+// lirena_XimeaStreamer_destroy(
+// 	LirenaXimeaStreamer * streamer);
 
-gboolean lirena_XimeaStreamer_initCam(LirenaXimeaStreamer *streamer);
+
+
+
+gboolean lirena_XimeaStreamer_openCamera(
+	LirenaXimeaStreamer* streamer
+);
+gboolean lirena_XimeaStreamer_setupCamParams(
+	LirenaXimeaStreamer_CameraParams* camParams,
+	LirenaConfig const * config
+);
 
 
 

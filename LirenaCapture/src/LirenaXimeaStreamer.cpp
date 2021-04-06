@@ -15,7 +15,98 @@
 
 
 
+gboolean lirena_XimeaStreamer_openCamera(
+	LirenaXimeaStreamer* streamer
+)
+{
 
+	streamer->camParams.acquire = TRUE;
+
+	// open cam required?
+	if (streamer->camParams.acquire && 
+	    streamer->camParams.cameraHandle == INVALID_HANDLE_VALUE)
+	{
+
+		DWORD nIndex = 0;
+		char *env = getenv("CAM_INDEX");
+		if (env)
+		{
+			nIndex = atoi(env);
+		}
+		DWORD tmp;
+		xiGetNumberDevices(&tmp); //rescan available devices
+
+		if (xiOpenDevice(nIndex, & streamer->camParams.cameraHandle) != XI_OK)
+		{
+			printf("Couldn't setup camera!\n");
+			streamer->camParams.acquire = FALSE;
+			return FALSE; //TRUE in original ximea code 0o ...
+		}
+
+	}
+
+	return TRUE;
+}
+
+
+
+gboolean lirena_XimeaStreamer_setupCamParams(
+	LirenaXimeaStreamer_CameraParams* camParams,
+	LirenaConfig const * config
+)
+{
+	HANDLE cameraHandle = camParams->cameraHandle;
+
+	if (cameraHandle != INVALID_HANDLE_VALUE)
+	{
+		float mingain, maxgain;
+
+		//TODO make sure this also is correct for new cam!
+		xiSetParamInt(cameraHandle, XI_PRM_IMAGE_DATA_FORMAT, XI_RAW8);
+			//gtk_toggle_button_get_active(raw) ? XI_RAW8 : XI_RGB32);
+		
+		//get gain stuff
+		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
+		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
+
+		//get cropping range
+		xiGetParamInt(cameraHandle, XI_PRM_WIDTH XI_PRM_INFO_MAX, &camParams->maxcx);
+		xiGetParamInt(cameraHandle, XI_PRM_HEIGHT XI_PRM_INFO_MAX, &camParams->maxcy);
+		
+		//init cropping to "no cropping"
+		camParams->roicx = camParams->maxcx;
+		camParams->roicy = camParams->maxcy;
+		camParams->roix0 = 0;
+		camParams->roiy0 = 0;
+
+		//hacky heuristic: set "medium gain"
+		// TODO make this CLI-configurable
+		float midgain = (maxgain + mingain) * 0.5f;
+		xiSetParamFloat(cameraHandle, XI_PRM_GAIN, midgain);
+
+		//make sure the cam does no cropping
+		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_X, camParams->roix0);
+		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_Y, camParams->roiy0);
+		xiSetParamInt(cameraHandle, XI_PRM_WIDTH,    camParams->roicx);
+		xiSetParamInt(cameraHandle, XI_PRM_HEIGHT, camParams->roicy);
+		
+
+		// white balance param..unused by us, as we debayer ourselves
+		int isColor = 0;
+		xiGetParamInt(cameraHandle, XI_PRM_IMAGE_IS_COLOR, &isColor);
+		if (isColor)
+		{
+			xiSetParamInt(cameraHandle, XI_PRM_AUTO_WB, 1);
+		}
+
+		// set exposure in microseconds from CLI arg
+		xiSetParamInt(cameraHandle, 
+			XI_PRM_EXPOSURE, 
+			1000 * config->exposure_ms);
+	}
+
+	return TRUE;
+}
 
 
 
@@ -36,9 +127,13 @@
 
 // TODO remove streaming logic from this gui function!
 //void* videoDisplay(void*)
-void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
+void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 {
-	LirenaCaptureApp *app = (LirenaCaptureApp *)appVoidPtr;
+	LirenaCaptureApp *appPtr = (LirenaCaptureApp *)appVoidPtr;
+
+	appPtr->streamer.captureThreadIsRunning = true;
+
+	bool haveGUI = appPtr->config.doLocalDisplay;
 
 	GstElement *pipeline = 0;
 	GstElement *appsrc_video = 0;
@@ -57,7 +152,8 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 	GstFlowReturn ret;
 
-	int max_width, max_height;
+	int max_width = 1000;
+	int max_height = 1000;
 	int prev_width = -1;
 	int prev_height = -1;
 
@@ -77,50 +173,60 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 	image.bp = NULL;
 	image.bp_size = 0;
 
-	if (xiStartAcquisition(app->camState.cameraHandle) != XI_OK)
+
+
+
+	if (xiStartAcquisition(appPtr->streamer.camParams.cameraHandle) != XI_OK)
 	{
-		return lirena_XimeaStreamer_captureThread_terminate(app);
+		return lirena_XimeaStreamer_captureThread_terminate(appPtr);
 	}
 
-	gdk_threads_enter();
 
-	//GdkScreen *screen;
 
-	app->localDisplayCtrl.widgets.videoWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	if(haveGUI)
+	{
+		gdk_threads_enter();
 
-	gtk_window_set_title(
-		GTK_WINDOW(app->localDisplayCtrl.widgets.videoWindow), "streamViewer");
-	gtk_widget_set_double_buffered(
-		app->localDisplayCtrl.widgets.videoWindow, FALSE);
+		appPtr->localDisplayCtrl.widgets.videoWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 
-	g_signal_connect(app->localDisplayCtrl.widgets.videoWindow,
-					 "realize", 
-					 G_CALLBACK(video_widget_realize_cb), 
-					 &app->localDisplayCtrl);
+		gtk_window_set_title(
+			GTK_WINDOW(appPtr->localDisplayCtrl.widgets.videoWindow), "streamViewer");
+		gtk_widget_set_double_buffered(
+			appPtr->localDisplayCtrl.widgets.videoWindow, FALSE);
 
-	// Messy hack to handle "shutdown app if CONTROL window is closed,
-	// but to sth ales if RENDER window is closed".
-	// The original logic didn't even work in the first place...
-	close_cb_params *params = (close_cb_params *)g_malloc0(sizeof(close_cb_params));
-	params->doShutDownApp = false; // do NOT shutdown on closing of control window!
-	params->captureThreadPtr = &app->captureThread;
-	params->camPtr= &app->camState;
-	g_signal_connect(app->localDisplayCtrl.widgets.videoWindow,
-					 "delete-event", G_CALLBACK(close_cb), params);
+		g_signal_connect(appPtr->localDisplayCtrl.widgets.videoWindow,
+						"realize", 
+						G_CALLBACK(video_widget_realize_cb), 
+						&appPtr->localDisplayCtrl);
 
-	gtk_widget_show_all(app->localDisplayCtrl.widgets.videoWindow);
-	gtk_widget_realize(app->localDisplayCtrl.widgets.videoWindow);
+		// Messy hack to handle "shutdown app if CONTROL window is closed,
+		// but to sth ales if RENDER window is closed".
+		// The original logic didn't even work in the first place...
+		close_cb_params *params = (close_cb_params *)g_malloc0(sizeof(close_cb_params));
+		params->doShutDownApp = false; // do NOT shutdown on closing of control window!
+		params->captureThreadPtr = &appPtr->streamer.captureThread;
+		params->camPtr= &appPtr->streamer.camParams;
+		g_signal_connect(appPtr->localDisplayCtrl.widgets.videoWindow,
+						"delete-event", G_CALLBACK(close_cb), params);
 
-	app->localDisplayCtrl.widgets.screen = gdk_screen_get_default();
+		gtk_widget_show_all(appPtr->localDisplayCtrl.widgets.videoWindow);
+		gtk_widget_realize(appPtr->localDisplayCtrl.widgets.videoWindow);
 
-	max_width = 0.8 * gdk_screen_get_width(app->localDisplayCtrl.widgets.screen);
-	max_height = 0.8 * gdk_screen_get_width(app->localDisplayCtrl.widgets.screen);
+		appPtr->localDisplayCtrl.widgets.screen = gdk_screen_get_default();
 
-	gdk_threads_leave();
+		max_width = 0.8 * gdk_screen_get_width(appPtr->localDisplayCtrl.widgets.screen);
+		max_height = 0.8 * gdk_screen_get_width(appPtr->localDisplayCtrl.widgets.screen);
 
-// ten thousand chars are hopefully sufficient...
-#define MAX_GSTREAMER_PIPELINE_STRING_LENGTH 10000
-#define MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH 1000
+		gdk_threads_leave();
+	}
+
+
+
+
+
+	// ten thousand chars are hopefully sufficient...
+	#define MAX_GSTREAMER_PIPELINE_STRING_LENGTH 10000
+	#define MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH 1000
 
 	gchar gstreamerPipelineString[MAX_GSTREAMER_PIPELINE_STRING_LENGTH];
 	gchar gstreamerForkString_raw_to_show_and_enc[MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
@@ -138,7 +244,7 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			   (gulong)MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
 			   "%s", "");
 
-	if (app->config.doLocalDisplay)
+	if (appPtr->config.doLocalDisplay)
 	{
 		g_snprintf(gstreamerForkString_raw_to_show_and_enc,
 				   (gulong)MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
@@ -155,7 +261,7 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 				   " fork_raw_to_show_and_enc. ! ");
 	}
 
-	if (app->config.outputFile)
+	if (appPtr->config.outputFile)
 	{
 		/*
           Inject dump-to-disk:
@@ -173,10 +279,10 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 				   ""
 				   " fork_enc_to_disk_and_UDP. ! "
 				   " queue ! ",
-				   app->config.outputFile);
+				   appPtr->config.outputFile);
 	}
 
-	if (app->config.useTCP)
+	if (appPtr->config.useTCP)
 	{
 		//TCP
 		GST_WARNING("%s", "Using TCP instead of UDP: "
@@ -192,8 +298,8 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 				   //"  sync-method=next-keyframe // works, but only for single-output recedeiver pipelines
 				   //"   sync-method=latest " //  works, but also no batter than next-keyframe
 				   ,
-				   app->config.IP,
-				   app->config.port);
+				   appPtr->config.IP,
+				   appPtr->config.port);
 	}
 	else
 	{
@@ -204,8 +310,8 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 				   "   host=%s"
 				   "   port=%s"
 				   "   sync=true ", // sync=false
-				   app->config.IP,
-				   app->config.port);
+				   appPtr->config.IP,
+				   appPtr->config.port);
 	}
 	//gStreamerNetworkTransmissionSnippet
 
@@ -269,15 +375,22 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 	if (!pipeline)
 	{
-		return lirena_XimeaStreamer_captureThread_terminate(app);
+		return lirena_XimeaStreamer_captureThread_terminate(appPtr);
 	}
 
-	bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
-	gst_bus_set_sync_handler(bus, 
-							(GstBusSyncHandler)bus_sync_handler,
-							 &app->localDisplayCtrl, //pipeline,
-							 NULL);
-	gst_object_unref(bus);
+
+
+	if(haveGUI)
+	{
+		bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
+		gst_bus_set_sync_handler(bus, 
+								(GstBusSyncHandler)bus_sync_handler,
+								&appPtr->localDisplayCtrl, //pipeline,
+								NULL);
+		gst_object_unref(bus);
+	}
+
+
 
 	appsrc_video = gst_bin_get_by_name(GST_BIN(pipeline), "streamViewer");
 	appsrc_klv = gst_bin_get_by_name(GST_BIN(pipeline), "klvSrc");
@@ -290,11 +403,11 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 	gst_defaultClock_prevTime = GST_ELEMENT(pipeline)->base_time;
 
-	while (app->camState.acquire)
+	while (appPtr->streamer.camParams.acquire)
 	{
 
 		// grab image
-		if (xiGetImage(app->camState.cameraHandle, 5000, &image) != XI_OK)
+		if (xiGetImage(appPtr->streamer.camParams.cameraHandle, 5000, &image) != XI_OK)
 		{
 			break;
 		}
@@ -308,7 +421,7 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 		guint64 frame_capture_PTS = (guint64)(curtime - firsttime) * GST_USECOND;
 		//}
 
-		if (app->camState.doRender)
+		if (appPtr->streamer.camParams.doRender)
 		{
 			unsigned long raw_image_buffer_size =
 				image.width * image.height * (image.frm == XI_RAW8 ? 1 : 4);
@@ -455,9 +568,14 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 				g_object_set(G_OBJECT(scale_element), "caps", size_caps, NULL);
 
-				gdk_threads_enter();
-				gtk_window_resize(GTK_WINDOW(app->localDisplayCtrl.widgets.videoWindow), width, height);
-				gdk_threads_leave();
+
+				if(haveGUI)
+				{
+					gdk_threads_enter();
+					gtk_window_resize(GTK_WINDOW(appPtr->localDisplayCtrl.widgets.videoWindow), width, height);
+					gdk_threads_leave();
+				}
+
 			}
 
 			//Clock stuff:
@@ -486,7 +604,7 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			//just test
 			guint64 myDuration = // abs_time - gst_defaultClock_prevTime;
 				gst_util_uint64_scale_int(
-					1, app->config.exposure_ms * GST_MSECOND, 1);
+					1, appPtr->config.exposure_ms * GST_MSECOND, 1);
 			//update for next frame
 			gst_defaultClock_prevTime = abs_time;
 
@@ -607,9 +725,17 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 				frames,
 				lostframes,
 				1000000.0 * (frames - prevframes) / (curtime - prevtime));
-			gtk_window_set_title(
-				GTK_WINDOW(app->localDisplayCtrl.widgets.videoWindow),
-				statistics_string);
+
+			if(haveGUI)
+			{
+				gtk_window_set_title(
+					GTK_WINDOW(appPtr->localDisplayCtrl.widgets.videoWindow),
+					statistics_string);
+			}
+			else
+			{
+				GST_INFO(statistics_string);
+			}
 
 			prevframes = frames;
 			prevtime = curtime;
@@ -629,7 +755,7 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 	//exit:
 
-	return lirena_XimeaStreamer_captureThread_terminate(app);
+	return lirena_XimeaStreamer_captureThread_terminate(appPtr);
 }
 
 
@@ -638,20 +764,38 @@ void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 void *lirena_XimeaStreamer_captureThread_terminate(LirenaCaptureApp *appPtr)
 {
-	gdk_threads_enter();
+	bool haveGUI = appPtr->config.doLocalDisplay;
 
-	gtk_widget_destroy(appPtr->localDisplayCtrl.widgets.videoWindow);
-	if (appPtr->camState.quitting)
+	if(haveGUI)
 	{
-		gtk_main_quit();
-	}
-	xiStopAcquisition(appPtr->camState.cameraHandle);
-	appPtr->camState.acquire = FALSE;
-	xiCloseDevice(appPtr->camState.cameraHandle);
-	appPtr->camState.cameraHandle = INVALID_HANDLE_VALUE;
-	appPtr->captureThread = 0;
+		gdk_threads_enter();
 
-	gdk_threads_leave();
+		gtk_widget_destroy(appPtr->localDisplayCtrl.widgets.videoWindow);
+		if (appPtr->streamer.camParams.quitting)
+		{
+			gtk_main_quit();
+		}
+		gdk_threads_leave();
+	}
+
+
+	xiStopAcquisition(appPtr->streamer.camParams.cameraHandle);
+	appPtr->streamer.camParams.acquire = FALSE;
+	xiCloseDevice(appPtr->streamer.camParams.cameraHandle);
+	appPtr->streamer.camParams.cameraHandle = INVALID_HANDLE_VALUE;
+
+    appPtr->streamer.captureThreadIsRunning = false;
+	//appPtr->streamer.captureThread = 0;
+
+	//could moving this up mean any further problem?
+	//gdk_threads_leave();
+	
+	// quit late, hoping to reduce hazards
+	if(!haveGUI)
+	{
+		g_main_loop_quit(appPtr->pureLoop);
+	}
+
 
 	return NULL;
 }
