@@ -21,9 +21,13 @@ struct LirenaCaptureApp
 {
 	LirenaConfig config;
 
-	LirenaCamera camState;
-
+    LirenaXimeaStreamer streamer;
+    
+    //TODO migrate to streamer
+	LirenaXimeaStreamer_CameraParams camState;
     pthread_t captureThread;
+    
+    
     // non-GUI loop for bus-listening,
     // in case local displaying is not requested
     GMainLoop *pureLoop;

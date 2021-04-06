@@ -104,7 +104,7 @@ struct LirenaCaptureDisplayController
 
 // Forward types for pointer params -------------------------------------------
 struct LirenaCaptureApp;
-struct LirenaCamera;
+struct LirenaXimeaStreamer_CameraParams;
 
 // function interface ----------------------------------------------------------
 
@@ -134,7 +134,7 @@ gboolean lirenaCaptureDisplayController_setupCamParams(
 //{ stuff to bind GStreamer renderings to an X/GDK/GTK window
 //  via videooverlay
 GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, 
-    LirenaCaptureDisplayController* displayCtrl);  //LirenaCamera* cam); //gpointer)
+    LirenaCaptureDisplayController* displayCtrl);  //LirenaXimeaStreamer_CameraParams* cam); //gpointer)
 
 void video_widget_realize_cb(GtkWidget *widget, 
 	LirenaCaptureDisplayController* displayCtrl);
@@ -161,7 +161,7 @@ struct close_cb_params
 	bool doShutDownApp;
 	//always non-null, but pointee kan be 0, implying thead is inactive
 	pthread_t* captureThreadPtr;
-    LirenaCamera * camPtr;
+    LirenaXimeaStreamer_CameraParams * camPtr;
 };
 
 gboolean close_cb(GtkWidget*, GdkEvent*,  
@@ -175,13 +175,13 @@ gboolean close_cb(GtkWidget*, GdkEvent*,
 
 
 //following only widget-to-cam-param stuff ------------------------------------
-gboolean update_show(GtkToggleButton *show,  LirenaCamera* cam); //gpointer)
-gboolean update_gain(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
-gboolean update_exposure(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
-gboolean update_cy(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
-gboolean update_cx(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
-gboolean update_y0(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
-gboolean update_x0(GtkAdjustment *adj, LirenaCamera* cam);
+gboolean update_show(GtkToggleButton *show,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_gain(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_exposure(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_cy(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_cx(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_y0(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_x0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams* cam);
 
 
 

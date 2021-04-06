@@ -14,9 +14,29 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // TODO remove streaming logic from this gui function!
 //void* videoDisplay(void*)
-void *videoDisplay(void *appVoidPtr)
+void *lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 {
 	LirenaCaptureApp *app = (LirenaCaptureApp *)appVoidPtr;
 
@@ -59,7 +79,7 @@ void *videoDisplay(void *appVoidPtr)
 
 	if (xiStartAcquisition(app->camState.cameraHandle) != XI_OK)
 	{
-		return videoThread_shutdown(app);
+		return lirena_XimeaStreamer_captureThread_terminate(app);
 	}
 
 	gdk_threads_enter();
@@ -249,7 +269,7 @@ void *videoDisplay(void *appVoidPtr)
 
 	if (!pipeline)
 	{
-		return videoThread_shutdown(app);
+		return lirena_XimeaStreamer_captureThread_terminate(app);
 	}
 
 	bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
@@ -609,14 +629,14 @@ void *videoDisplay(void *appVoidPtr)
 
 	//exit:
 
-	return videoThread_shutdown(app);
+	return lirena_XimeaStreamer_captureThread_terminate(app);
 }
 
 
 
 
 
-void *videoThread_shutdown(LirenaCaptureApp *appPtr)
+void *lirena_XimeaStreamer_captureThread_terminate(LirenaCaptureApp *appPtr)
 {
 	gdk_threads_enter();
 

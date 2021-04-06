@@ -19,7 +19,7 @@
 // Type forwards:
 
 //struct LirenaCaptureApp;
-//struct LirenaCamera;
+//struct LirenaXimeaStreamer_CameraParams;
 //struct LirenaCaptureDisplay;
 
 //----------------------------------------------------------------------------

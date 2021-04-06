@@ -192,7 +192,7 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 			appPtr->config.exposure_ms);
 
 		if (pthread_create(&appPtr->captureThread,
-						   NULL, videoDisplay, (void *)appPtr))
+						   NULL, lirena_XimeaStreamer_captureThread_run, (void *)appPtr))
 		{
 			exit(1);
 		}
@@ -394,14 +394,14 @@ gboolean close_cb(GtkWidget *, GdkEvent *,
 
 //following only widget-to-cam-param stuff ------------------------------------
 
-gboolean update_show(GtkToggleButton *show, LirenaCamera *cam) //gpointer)
+gboolean update_show(GtkToggleButton *show, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	cam->doRender = gtk_toggle_button_get_active(show);
 	return TRUE;
 }
 
 
-gboolean update_x0(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
+gboolean update_x0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	
 	cam->roix0 = gtk_adjustment_get_value(adj);
@@ -414,7 +414,7 @@ gboolean update_x0(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
 	return TRUE;
 }
 
-gboolean update_y0(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
+gboolean update_y0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	cam->roiy0 = gtk_adjustment_get_value(adj);
 	if (cam->roicy + cam->roiy0 > cam->maxcy)
@@ -426,7 +426,7 @@ gboolean update_y0(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
 	return TRUE;
 }
 
-gboolean update_cx(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
+gboolean update_cx(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	cam->roicx = gtk_adjustment_get_value(adj);
 	if (cam->roix0 + cam->roicx > cam->maxcx)
@@ -438,7 +438,7 @@ gboolean update_cx(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
 	return TRUE;
 }
 
-gboolean update_cy(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
+gboolean update_cy(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	cam->roicy = gtk_adjustment_get_value(adj);
 	if (cam->roiy0 + cam->roicy > cam->maxcy)
@@ -450,7 +450,7 @@ gboolean update_cy(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
 	return TRUE;
 }
 
-gboolean update_exposure(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
+gboolean update_exposure(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	xiSetParamInt(cam->cameraHandle, XI_PRM_EXPOSURE, 
 		1000 * gtk_adjustment_get_value(adj));
@@ -458,7 +458,7 @@ gboolean update_exposure(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
 	return TRUE;
 }
 
-gboolean update_gain(GtkAdjustment *adj, LirenaCamera *cam) //gpointer)
+gboolean update_gain(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	xiSetParamFloat(cam->cameraHandle, XI_PRM_GAIN, gtk_adjustment_get_value(adj));
 	return TRUE;
