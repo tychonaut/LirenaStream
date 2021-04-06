@@ -291,11 +291,12 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 		g_snprintf(gStreamerNetworkTransmissionSnippet,
 				   (gulong)MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
 				   " rtpstreampay ! " // wrap RTP stuff another time for TCP ... (?)
+				   "  application/x-rtp-stream ! "
 				   " tcpserversink "
 				   "   host=%s "
 				   "   port=%s "
-				   "   sync-method=burst "
-				   //"  sync-method=next-keyframe // works, but only for single-output recedeiver pipelines
+				   //"   sync-method=burst "
+				   "  sync-method=next-keyframe " // works, but only for single-output recedeiver pipelines
 				   //"   sync-method=latest " //  works, but also no batter than next-keyframe
 				   ,
 				   appPtr->config.IP,

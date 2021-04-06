@@ -25,7 +25,7 @@ static struct argp_option options[] = {
     "For debugging :display video locally, (not just stream per UDP)" },
   {"output",        'o', "FILE",    0, 
     "For debugging: Dump encoded stream to disk" }, //OPTION_ARG_OPTIONAL
-  {"useTCP",        't', "0",       0, 
+  {"useTCP",        't', 0,       0, 
     "Experimental (may not work!): Use TCP instead of UDP " }, //OPTION_ARG_OPTIONAL
   {"exposure",      'e', "time_ms", 0, 
     "Exposure time in milliseconds" },
