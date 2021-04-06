@@ -3,7 +3,7 @@
 
 
 #include "LirenaConfig.h"
-#include "LirenaCamera.h"
+#include "LirenaXimeaStreamer.h"
 // #include "LirenaKLVappsrc.h"
 
 #include "LirenaCaptureDisplayController.h"
@@ -23,11 +23,13 @@ struct LirenaCaptureApp
 
 	LirenaCamera camState;
 
-	LirenaCaptureDisplayController localDisplayCtrl;
-
+    pthread_t captureThread;
     // non-GUI loop for bus-listening,
     // in case local displaying is not requested
     GMainLoop *pureLoop;
+
+    //GUI stuff
+	LirenaCaptureDisplayController localDisplayCtrl;
 };
 
 

@@ -1,7 +1,7 @@
 
 
 
- #include "Lirena.h"
+#include "LirenaCaptureApp.h"
 
 
 // #include <gst/app/gstappsrc.h>
@@ -31,8 +31,8 @@
 int main(int argc, char **argv);
 
 // creates zero-inited instance and parses and sets args/options
-LirenaCaptureApp *lirena_camStreamApp_create(int argc, char **argv);
-void lirena_camStreamApp_destroy(LirenaCaptureApp *appPtr);
+LirenaCaptureApp *lirena_captureApp_create(int argc, char **argv);
+void lirena_captureApp_destroy(LirenaCaptureApp *appPtr);
 
 
 
@@ -50,7 +50,7 @@ void lirena_camStreamApp_destroy(LirenaCaptureApp *appPtr);
 //-----------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
-	LirenaCaptureApp *appPtr = lirena_camStreamApp_create(argc, argv);
+	LirenaCaptureApp *appPtr = lirena_captureApp_create(argc, argv);
 
 	//TODO find out if this threading- gui mess can be reordered/reduced...
 	if(appPtr->config.doLocalDisplay)
@@ -106,13 +106,13 @@ int main(int argc, char **argv)
 
 	//exit program
 	appPtr->camState.acquire = FALSE;
-	if (appPtr->localDisplayCtrl.videoThread)
+	if (appPtr->captureThread)
 	{
-		pthread_join(appPtr->localDisplayCtrl.videoThread, NULL);
-		appPtr->localDisplayCtrl.videoThread = 0;
+		pthread_join(appPtr->captureThread, NULL);
+		appPtr->captureThread = 0;
 	}
 
-	lirena_camStreamApp_destroy(appPtr);
+	lirena_captureApp_destroy(appPtr);
 	appPtr = NULL;
 
 	return 0;
@@ -123,7 +123,7 @@ int main(int argc, char **argv)
 
 
 // creates zero-inited instance and parses and sets args/options
-LirenaCaptureApp *lirena_camStreamApp_create(int argc, char **argv)
+LirenaCaptureApp *lirena_captureApp_create(int argc, char **argv)
 {
 	LirenaCaptureApp *appPtr =
 		//init all to zero/nullptr/false
@@ -138,13 +138,13 @@ LirenaCaptureApp *lirena_camStreamApp_create(int argc, char **argv)
 	appPtr->config = parseArguments(argc, argv);
 
 	//TODO continue;
-	appPtr->localDisplayCtrl.videoThread = 0;
+	appPtr->captureThread = 0;
 	appPtr->localDisplayCtrl.drawableWindow_handle = 0;
 
 	return appPtr;
 }
 
-void lirena_camStreamApp_destroy(LirenaCaptureApp *appPtr)
+void lirena_captureApp_destroy(LirenaCaptureApp *appPtr)
 {
 	g_free(appPtr);
 }

@@ -1,8 +1,8 @@
 
 
-#include "LirenaCamera.h"
+#include "LirenaXimeaStreamer.h"
 
-#include "Lirena.h"
+#include "LirenaCaptureApp.h"
 #include "LirenaKLVappsrc.h"
 
 
@@ -83,7 +83,7 @@ void *videoDisplay(void *appVoidPtr)
 	// The original logic didn't even work in the first place...
 	close_cb_params *params = (close_cb_params *)g_malloc0(sizeof(close_cb_params));
 	params->doShutDownApp = false; // do NOT shutdown on closing of control window!
-	params->videoThreadPtr = &app->localDisplayCtrl.videoThread;
+	params->captureThreadPtr = &app->captureThread;
 	params->camPtr= &app->camState;
 	g_signal_connect(app->localDisplayCtrl.widgets.videoWindow,
 					 "delete-event", G_CALLBACK(close_cb), params);
@@ -629,7 +629,7 @@ void *videoThread_shutdown(LirenaCaptureApp *appPtr)
 	appPtr->camState.acquire = FALSE;
 	xiCloseDevice(appPtr->camState.cameraHandle);
 	appPtr->camState.cameraHandle = INVALID_HANDLE_VALUE;
-	appPtr->localDisplayCtrl.videoThread = 0;
+	appPtr->captureThread = 0;
 
 	gdk_threads_leave();
 

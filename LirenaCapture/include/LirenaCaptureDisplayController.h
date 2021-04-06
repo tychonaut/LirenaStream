@@ -19,9 +19,12 @@
 
 #include <gst/app/gstappsrc.h>
 
+// to show a GStreamer rendering on a self-created 
+// X/GDK/GTK window
 #include <gst/video/videooverlay.h>
 
-#include <m3api/xiApi.h> //Ximea API
+//Ximea API
+#include <m3api/xiApi.h>
 
 
 
@@ -87,7 +90,6 @@ struct LirenaCaptureWidgets
 
 struct LirenaCaptureDisplayController
 {
-	pthread_t videoThread;
 	guintptr drawableWindow_handle;
 
     //TODO rename member to "widgets"
@@ -104,29 +106,52 @@ struct LirenaCaptureDisplayController
 struct LirenaCaptureApp;
 struct LirenaCamera;
 
-// function interface
+// function interface ----------------------------------------------------------
 
-//{ init stuff
-bool lirenaCaptureDisplayController_setupWidgets(LirenaCaptureDisplayController *dispCtrl);
-bool lirenaCaptureDisplayController_setupCallbacks(LirenaCaptureApp * appPtr);
+//{ init GUI stuff
+bool lirenaCaptureDisplayController_setupWidgets(
+    LirenaCaptureDisplayController *dispCtrl);
+bool lirenaCaptureDisplayController_setupCallbacks(
+    LirenaCaptureApp * appPtr);
 //}
 
 
 
 
+gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(
+    GtkToggleButton *run,  LirenaCaptureApp* app);
+
+gboolean lirenaCaptureDisplayController_setupCamParams(
+    GtkToggleButton *raw, LirenaCaptureApp* appPtr);
 
 
 
+
+//-----------------------------------------------------------------------------
+// Everything below seems irrelevant for non-GUI mode
+
+
+//{ stuff to bind GStreamer renderings to an X/GDK/GTK window
+//  via videooverlay
 GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, 
     LirenaCaptureDisplayController* displayCtrl);  //LirenaCamera* cam); //gpointer)
 
-gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(LirenaCaptureApp* app);
-
 void video_widget_realize_cb(GtkWidget *widget, 
 	LirenaCaptureDisplayController* displayCtrl);
+//}
 
 
-gboolean start_cb(LirenaCaptureApp* appPtr);
+// button sensitivity callback: irrelevant for non-GUI mode
+gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(
+    LirenaCaptureApp* app);
+
+// some kind of hack to force ANOTHER callback to be called early...
+// ... don't understand the details (MS)
+// is irrelevant for non-GUI mode
+gboolean lirenaCaptureDisplayController_startHack_cb(
+    LirenaCaptureApp* appPtr);
+
+
 
 // Messy hack to handle "shutdown app if CONTROL window is closed, 
 // but to sth ales if RENDER window is closed".
@@ -135,7 +160,7 @@ struct close_cb_params
 {
 	bool doShutDownApp;
 	//always non-null, but pointee kan be 0, implying thead is inactive
-	pthread_t* videoThreadPtr;
+	pthread_t* captureThreadPtr;
     LirenaCamera * camPtr;
 };
 
@@ -147,11 +172,10 @@ gboolean close_cb(GtkWidget*, GdkEvent*,
 
 
 
-//TODO get rid of app state in this function -> diviede display and cam stuff!
-gboolean update_run(GtkToggleButton *run,  LirenaCaptureApp* app);
-gboolean update_show(GtkToggleButton *show,  LirenaCamera* cam); //gpointer)
-gboolean update_raw(GtkToggleButton *raw, LirenaCaptureApp* appPtr);
 
+
+//following only widget-to-cam-param stuff ------------------------------------
+gboolean update_show(GtkToggleButton *show,  LirenaCamera* cam); //gpointer)
 gboolean update_gain(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
 gboolean update_exposure(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)
 gboolean update_cy(GtkAdjustment *adj,  LirenaCamera* cam); //gpointer)

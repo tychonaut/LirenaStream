@@ -1,5 +1,5 @@
-#ifndef __LIRENA_CAMERA_H__
-#define __LIRENA_CAMERA_H__
+#ifndef __LIRENA_XIMEA_STREAMER_H__
+#define __LIRENA_XIMEA_STREAMER_H__
 
 
 
@@ -58,4 +58,4 @@ void *videoThread_shutdown(LirenaCaptureApp *appPtr);
 
 
 
-#endif //__LIRENA_CAMERA_H__
+#endif //__LIRENA_XIMEA_STREAMER_H__

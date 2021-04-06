@@ -49,7 +49,7 @@ incdir = include_directories('include')
 exe_source_files = [
   'src/LirenaCaptureApp.cpp',
   'src/LirenaConfig.cpp',
-  'src/LirenaCamera.cpp',
+  'src/LirenaXimeaStreamer.cpp',
   'src/LirenaKLVappsrc.cpp',
   'src/LirenaCaptureDisplayController.cpp']
 
