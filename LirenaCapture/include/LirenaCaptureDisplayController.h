@@ -100,17 +100,19 @@ struct LirenaCaptureDisplayController
 
 
 
-
-
-
-// Forward types for pointer params
+// Forward types for pointer params -------------------------------------------
 struct LirenaCaptureApp;
 struct LirenaCamera;
 
+// function interface
+
+//{ init stuff
+bool lirenaCaptureDisplayController_setupWidgets(LirenaCaptureDisplayController *dispCtrl);
+bool lirenaCaptureDisplayController_setupCallbacks(LirenaCaptureApp * appPtr);
+//}
 
 
-//TODO outsource app state in this function -> diviede display and cam stuff!
-void* videoDisplay(void* appVoidPtr);
+
 
 
 
@@ -118,7 +120,7 @@ void* videoDisplay(void* appVoidPtr);
 GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, 
     LirenaCaptureDisplayController* displayCtrl);  //LirenaCamera* cam); //gpointer)
 
-gboolean camTriggerHandler(LirenaCaptureApp* app);
+gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(LirenaCaptureApp* app);
 
 void video_widget_realize_cb(GtkWidget *widget, 
 	LirenaCaptureDisplayController* displayCtrl);

@@ -1,9 +1,8 @@
-// Parse CLI options:
-// use global variable "globalAppArgs"
-
 #ifndef __LIRENA_CONFIG_H__
 #define __LIRENA_CONFIG_H__
 
+
+// Parse CLI options:
 
 #include <stdlib.h>
 #include <argp.h> // CLI arguments parsing

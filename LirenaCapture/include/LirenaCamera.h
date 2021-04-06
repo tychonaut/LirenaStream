@@ -1,13 +1,24 @@
 #ifndef __LIRENA_CAMERA_H__
 #define __LIRENA_CAMERA_H__
 
+
+
+
 #include <m3api/xiApi.h> //Ximea API
+
 
 
 
 //----------------------------------------------------------------------------
 // Macros
-#define STATUS_STRING_LENGTH 4096
+#define LIRENA_STATUS_STRING_LENGTH 4096
+
+
+
+
+struct LirenaCaptureApp;
+
+
 
 
 
@@ -24,7 +35,7 @@ struct LirenaCamera
 
 struct LirenaFrameMetaData
 {
-    char statusString[STATUS_STRING_LENGTH];
+    char statusString[LIRENA_STATUS_STRING_LENGTH];
 
     unsigned long current_time = 0;
     unsigned long prev_time = 0;
@@ -37,6 +48,14 @@ struct LirenaFrameMetaData
 	unsigned long current_frame_duration = 0;
     unsigned long lost_frames_count = 0;
 };
+
+
+// TODO rename & restructure function, 
+// separate gui from capture&processing&streaming logic!
+void* videoDisplay(void* appVoidPtr);
+void *videoThread_shutdown(LirenaCaptureApp *appPtr);
+
+
 
 
 #endif //__LIRENA_CAMERA_H__
