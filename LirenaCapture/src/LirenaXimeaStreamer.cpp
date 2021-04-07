@@ -333,7 +333,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			   // KLV appsrc to  muxer:
 			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=klvSrc ! "
 			   "   meta/x-klv, parsed=true ! "
-			   " mpegtsmux name=mp2ts_muxer alignment=0 "
+			   " mpegtsmux name=mp2ts_muxer alignment=0 " //maybe alignment 7 for UDP!? as gstinspect says!
 			   //"  mpegtsmux."
 			   ""
 			   // Video appsrc, encode h264, to muxer:

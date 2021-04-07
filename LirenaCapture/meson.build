@@ -1,6 +1,6 @@
 project('LirenaCapture', 'c', 'cpp',
   version: '0.2.1',
-  meson_version : '>= 0.57.999',
+  meson_version : '>= 0.57.1',
   default_options : [
     'buildtype=debugoptimized'
   ]
