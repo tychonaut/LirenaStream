@@ -6,13 +6,27 @@ project('LirenaCapture', 'c', 'cpp',
   ]
 )
 
-
-#'warning_level=1',
-#'c_std=gnu99'
-#gstreamer_api_version = '1.0'
-
 cc = meson.get_compiler('c')
 #cppc = meson.get_compiler('cpp')
+
+
+
+#{ distinguish arm64 and x86_64 -----------------------------------------------
+#  TODO maybe extend to cross compilation
+architectureString = 'arm64'
+if build_machine.cpu_family() == 'aarch64'
+    architectureString = 'arm64'
+elif build_machine.cpu_family() == 'x86_64'
+    architectureString = 'x64'
+else
+    error('CPU architecture not supported yet' + build_machine.cpu_family())
+endif
+message('Build machine CPU family : '+ build_machine.cpu_family())
+message('Build machine CPU        : '+ build_machine.cpu())
+message('Build architecture string: '+ architectureString)
+#} end arm vc x86 -------------------------------------------------------------
+
+
 
 # dependencies -----------------------------------------------------------------
 gst_app_dep = dependency('gstreamer-app-1.0')
@@ -30,6 +44,66 @@ threading_dep = dependency('threads')
 gtk2_dep = dependency('gtk+-2.0')
 X11_dep = dependency('X11')
 
+
+#{ magewell capture SDK: --------------
+
+magewell_SDK_root_dir = '../../deps/MagewellSDK'
+message('magewell SDK root dir: '+ magewell_SDK_root_dir)
+
+
+magewell_SDK_lib_dir = magewell_SDK_root_dir  + '/lib/' + architectureString
+message('Megewell SDK lib dir: ' +  magewell_SDK_lib_dir)
+magewell_SDK_include_dir = magewell_SDK_root_dir  + '/include/'
+
+magewell_SDK_dep = declare_dependency(
+    link_args : [
+        '-L' + magewell_SDK_lib_dir, 
+        '-lMWCapture'
+    ],
+    include_directories : [ magewell_SDK_include_dir ]
+)
+
+#pthread --> threading_dep, see above
+dl_dep = cc.find_library('dl', required : true)
+udev_dep = cc.find_library('udev', required : true)
+asound_dep = cc.find_library('asound', required : true)
+v4l2_dep = cc.find_library('v4l2', required : true)
+
+magewell_deps = [
+    magewell_SDK_dep,
+    threading_dep,
+    dl_dep,
+    udev_dep,
+    asound_dep,
+    v4l2_dep,
+]
+
+#{ Hacky stuff in order to not mess with environment variables ($PATH)
+#  before launching the app during runtime:
+#  Bake the search path for shared libs into the executable;
+#  Make it absolute so that the working directory is irrelevant.
+#  https://amir.rachum.com/blog/2016/09/17/shared-libraries/#rpath-and-runpath
+#  This s a questionable decision, but I want this app to be as self-contained
+#  as possible at the moment: There shall be as little hassle as possible
+#  to make it compile and run on a new system after pulling the repo.
+magewell_SDK_ABS_root_dir = meson.project_source_root() + \
+    '/../deps/MagewellSDK'
+magewell_SDK_ABS_lib_dir =  magewell_SDK_ABS_root_dir  +  '/lib/' + \
+    architectureString
+message('Magewell SDK absolute lib path ' + \
+        '(for runtime linking to shared libs:)\n\t' + \
+        magewell_SDK_ABS_lib_dir)
+   
+my_rpath =  magewell_SDK_ABS_lib_dir
+#}     
+    
+#} end Magewell stuff -----------------
+
+
+
+
+
+
 all_deps = [
     gst_app_dep, 
     gst_video_dep,
@@ -37,7 +111,8 @@ all_deps = [
     ximea_dng_dep,
     threading_dep,
     gtk2_dep,
-    X11_dep
+    X11_dep,
+    magewell_deps,
 ]
 #-------------------------------------------------------------------------------
 
@@ -57,5 +132,8 @@ executable('lirenaCapture',
   exe_source_files,
   install : true,
   dependencies : all_deps,
-  include_directories: incdir
+  include_directories: incdir,
+  # see explanation above (for my_rpath)
+  build_rpath   : my_rpath,
+  install_rpath : my_rpath,
 )

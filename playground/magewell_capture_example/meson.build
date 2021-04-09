@@ -11,7 +11,7 @@ cc = meson.get_compiler('c')
 #cppc = meson.get_compiler('cpp')
 
 
-#{ distinguish arm64 and x86_64 ------------------------------------------------
+#{ distinguish arm64 and x86_64 -----------------------------------------------
 #  TODO maybe extend to cross compilation
 architectureString = 'arm64'
 if build_machine.cpu_family() == 'aarch64'
@@ -24,7 +24,7 @@ endif
 message('Build machine CPU family : '+ build_machine.cpu_family())
 message('Build machine CPU        : '+ build_machine.cpu())
 message('Build architecture string: '+ architectureString)
-#}
+#} end arm vc x86 -------------------------------------------------------------
 
 
 #{ dependencies -----------------------------------------------------------------
@@ -46,7 +46,7 @@ X11_dep = dependency('X11')
 
 
 
-#{ magewell capture SDK: ------------------------------------------------------
+#{ magewell capture SDK: --------------
 
 magewell_SDK_root_dir = '../../../deps/MagewellSDK'
 message('magewell SDK root dir: '+ magewell_SDK_root_dir)
@@ -64,14 +64,11 @@ magewell_SDK_dep = declare_dependency(
     include_directories : [ magewell_SDK_include_dir ]
 )
 
-
-
 #pthread --> threading_dep, see above
 dl_dep = cc.find_library('dl', required : true)
 udev_dep = cc.find_library('udev', required : true)
 asound_dep = cc.find_library('asound', required : true)
 v4l2_dep = cc.find_library('v4l2', required : true)
-
 
 magewell_deps = [
     magewell_SDK_dep,
@@ -101,7 +98,7 @@ message('Magewell SDK absolute lib path ' + \
 my_rpath =  magewell_SDK_ABS_lib_dir
 #}     
     
-#} end Magewell stuff ---------------------------------------------------------
+#} end Magewell stuff -----------------
 
 
 
