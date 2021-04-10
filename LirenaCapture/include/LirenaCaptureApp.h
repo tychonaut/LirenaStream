@@ -6,7 +6,7 @@
 #include "LirenaStreamer.h"
 // #include "LirenaKLVappsrc.h"
 
-#include "LirenaCaptureDisplayController.h"
+#include "LirenaCaptureUI/LirenaCaptureUI.h"
 
 //----------------------------------------------------------------------------
 // Type forwards:
@@ -20,15 +20,18 @@
 class LirenaCaptureApp
 {
     public:
-        LirenaConfig config;
+        LirenaCaptureApp(LirenaConfig * configPtr);
+        ~LirenaCaptureApp();
 
-        LirenaStreamer streamer;
+        LirenaConfig * configPtr;
+
+        LirenaStreamer* streamerPtr;
 
         // UI stuff
         // TODO make pointer cause actract and factory...
-        LirenaCaptureUI ui;
+        LirenaCaptureUI* uiPtr;
         
-        //TODO outsource to LirenaNetworkUI
+//TODO outsource to LirenaNetworkUI
         // non-GUI loop for bus-listening,
         // in case local displaying is not requested;
         // probably not nececcary as long as no listening to 

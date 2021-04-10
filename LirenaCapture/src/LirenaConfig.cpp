@@ -154,43 +154,46 @@ static struct argp argp = { options, parse_opt, args_doc, doc };
 
 
 
-LirenaConfig parseArguments(int argc, char **argv)
+//parseArguments
+LirenaConfig::LirenaConfig(int argc, char **argv)
+  : argc(argc),
+    argv(argv)
 {
-	LirenaConfig ret;
+	//LirenaConfig ret;
    
     //{ Default values:
 
-    ret.captureDeviceType = LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera;
+    this->captureDeviceType = LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera;
 
-    ret.IP = "192.168.0.169";
-    ret.port = "5001";
+    this->IP = "192.168.0.169";
+    this->port = "5001";
 
-    ret.targetResolutionX = -1;
-    ret.targetResolutionY = -1;
-    ret.targetFPS = -1;
+    this->targetResolutionX = -1;
+    this->targetResolutionY = -1;
+    this->targetFPS = -1;
 
-    ret.useTCP = false;
+    this->useTCP = false;
 
-    ret.doLocalDisplay = false;
-    ret.haveLocalGUI = false;
+    this->doLocalDisplay = false;
+    this->haveLocalGUI = false;
 
-    ret.outputFile = nullptr;
+    this->outputFile = nullptr;
 
-    ret.ximeaparams.exposure_ms = 30;
-    ret.ximeaparams.useCudaDemosaic = false;
+    this->ximeaparams.exposure_ms = 30;
+    this->ximeaparams.useCudaDemosaic = false;
     //}
 
 
     /* Parse our arguments; every option seen by parse_opt will
        be reflected in arguments. */
-    argp_parse (&argp, argc, argv, 0, 0, &ret);
+    argp_parse (&argp, argc, argv, 0, 0, this);
 
 
-    if(ret.haveLocalGUI && 
-      ret.captureDeviceType != LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera)
+    if(this->haveLocalGUI && 
+      this->captureDeviceType != LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera)
     {
       printf("%s", "Error: GUI is currently only supported for Ximea device! Disabling GUI option...\n");
-      ret.haveLocalGUI = false;
+      this->haveLocalGUI = false;
     }
 
     // dlgofxytec
@@ -206,31 +209,29 @@ LirenaConfig parseArguments(int argc, char **argv)
             "Exposure = %i\n"
             "use Cuda demosaic (instead of GStreamer software impl.) = %s\n",
 
-            ret.IP, 
-            ret.port,
+            this->IP, 
+            this->port,
 
-            ret.captureDeviceType == LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera ?
+            this->captureDeviceType == LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera ?
               "Ximea (camera)" 
               :
-              ret.captureDeviceType == LIRENA_CAPTURE_DEVICE_TYPE_MagewellEcoCapture ?
+              this->captureDeviceType == LIRENA_CAPTURE_DEVICE_TYPE_MagewellEcoCapture ?
               "MagewellEco (capture card)" 
               : "unsupported device type (internal error!)"
               ,
 
-            ret.targetFPS,
-            ret.targetResolutionX, ret.targetResolutionY,
+            this->targetFPS,
+            this->targetResolutionX, this->targetResolutionY,
 
-            ret.doLocalDisplay ? "yes" : "no",
-            ret.haveLocalGUI ? "yes" : "no",
+            this->doLocalDisplay ? "yes" : "no",
+            this->haveLocalGUI ? "yes" : "no",
 
-            ret.outputFile ? ret.outputFile : "-none-",
+            this->outputFile ? this->outputFile : "-none-",
 
-            ret.useTCP ? "yes" : "no",
+            this->useTCP ? "yes" : "no",
 
-            ret.ximeaparams.exposure_ms,
-            ret.ximeaparams.useCudaDemosaic ? "yes" : "no"
+            this->ximeaparams.exposure_ms,
+            this->ximeaparams.useCudaDemosaic ? "yes" : "no"
     );
-
-	return ret;
 }
 

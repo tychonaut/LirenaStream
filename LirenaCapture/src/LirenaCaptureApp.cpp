@@ -31,8 +31,8 @@
 int main(int argc, char **argv);
 
 // creates zero-inited instance and parses and sets args/options
-LirenaCaptureApp *lirena_captureApp_create(int argc, char **argv);
-void lirena_captureApp_destroy(LirenaCaptureApp *appPtr);
+//LirenaCaptureApp *lirena_captureApp_create(int argc, char **argv);
+//void lirena_captureApp_destroy(LirenaCaptureApp *appPtr);
 
 
 
@@ -50,10 +50,20 @@ void lirena_captureApp_destroy(LirenaCaptureApp *appPtr);
 //-----------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
-	LirenaCaptureApp *appPtr = lirena_captureApp_create(argc, argv);
+	LirenaConfig* configPtr = new LirenaConfig(argc, argv);
+	LirenaCaptureUI::init(configPtr);
+	LirenaCaptureApp *appPtr = new LirenaCaptureApp(configPtr);
+
+	delete appPtr;
+	appPtr = nullptr;
+
+	return 0;
+	
+	//-----------------------------------------------------------------------
+	//old code:
 
 	//TODO find out if this threading- ui mess can be reordered/reduced...
-	if(appPtr->config.doLocalDisplay)
+	if(appPtr->configPtr->doLocalDisplay)
 	{
 		#ifdef GDK_WINDOWING_X11
 		XInitThreads();
@@ -65,17 +75,18 @@ int main(int argc, char **argv)
 
 	  	gtk_init(&argc, &argv);
 	}
-		
+
+	// have transformed until here ----	
 
 	gst_init(&argc, &argv);
 
 
-	if(appPtr->config.doLocalDisplay)
+	if(appPtr->configPtr->doLocalDisplay)
 	{
-		bool success = lirenaCaptureDisplayController_setupWidgets(&appPtr->ui);
+		bool success = lirenaCaptureDisplayController_setupWidgets(appPtr->uiPtr);
 		success &= lirenaCaptureDisplayController_setupCallbacks(appPtr);		
 		//show GUI windows
-		gtk_widget_show_all(appPtr->ui.widgets.controlWindow);
+		gtk_widget_show_all(appPtr->uiPtr->widgets.controlWindow);
 		//start the GUI main loop
 		gtk_main();
 		//exit program
@@ -89,26 +100,26 @@ int main(int argc, char **argv)
 		appPtr->pureMainLoop = g_main_loop_new (NULL, FALSE);
 
 		if (//shall capture ?
-			appPtr->streamer.camParams.acquire 
+			appPtr->streamerPtr->camParams.acquire 
 		)
 		{
 			// open cam
 			gboolean success = 
 				lirena_XimeaStreamer_openCamera(
-					& appPtr->streamer
+					appPtr->streamerPtr
 				);
 			g_assert(success);
 
 			// set reasonable params to cam
 			if( success && 
 				// cam opened?
-				(appPtr->streamer.camParams.cameraHandle != INVALID_HANDLE_VALUE) 
+				(appPtr->streamerPtr->camParams.cameraHandle != INVALID_HANDLE_VALUE) 
 			)
 			{
 				success &= 
 					lirena_XimeaStreamer_setupCamParams(
-						& appPtr->streamer.camParams,
-						appPtr->streamer.configPtr
+						& appPtr->streamerPtr->camParams,
+						appPtr->streamerPtr->configPtr
 					);
 				g_assert(success);
 			}
@@ -117,11 +128,11 @@ int main(int argc, char **argv)
 			// can stay free for bus message listening etc.
 			if( success && 
 				// capture thread not already existing?
-				! appPtr->streamer.captureThreadIsRunning
+				! appPtr->streamerPtr->captureThreadIsRunning
 			)
 			{
 				if (pthread_create(
-						&appPtr->streamer.captureThread,
+						&appPtr->streamerPtr->captureThread,
 						NULL, 
 						lirena_XimeaStreamer_captureThread_run, 
 						(void *) appPtr
@@ -145,16 +156,17 @@ int main(int argc, char **argv)
 
 	//exit program
 
-	appPtr->streamer.camParams.acquire = FALSE;
+	appPtr->streamerPtr->camParams.acquire = FALSE;
 	
-	if (appPtr->streamer.captureThread != 0)
+	if (appPtr->streamerPtr->captureThread != 0)
 	{
-		pthread_join(appPtr->streamer.captureThread, NULL);
-		appPtr->streamer.captureThread = 0;
-		g_assert( ! appPtr->streamer.captureThreadIsRunning);
+		pthread_join(appPtr->streamerPtr->captureThread, NULL);
+		appPtr->streamerPtr->captureThread = 0;
+		g_assert( ! appPtr->streamerPtr->captureThreadIsRunning);
 	}
 
-	lirena_captureApp_destroy(appPtr);
+	//lirena_captureApp_destroy(appPtr);
+	delete appPtr;
 	appPtr = NULL;
 
 	return 0;
@@ -164,41 +176,31 @@ int main(int argc, char **argv)
 
 
 // creates zero-inited instance and parses and sets args/options
-LirenaCaptureApp *lirena_captureApp_create(int argc, char **argv)
+//LirenaCaptureApp *lirena_captureApp_create(int argc, char **argv)
+LirenaCaptureApp::LirenaCaptureApp(LirenaConfig * configPtr)
+	:
+	configPtr(configPtr),
+	streamerPtr( new LirenaStreamer(configPtr) ),
+
+	uiPtr( LirenaCaptureUI::createInstance (streamerPtr->captureDevicePtr))
 {
-	LirenaCaptureApp *appPtr =
-		//init all to zero/nullptr/false
-		(LirenaCaptureApp *) g_malloc0(sizeof(LirenaCaptureApp));
+
+//TODO outsource
+	// appPtr->uiPtr->drawableWindow_handle = 0;
 
 
-	appPtr->config = parseArguments(argc, argv);
 
-	//for backtracking
-	appPtr->streamer.configPtr = &appPtr->config;
-
-	appPtr->streamer.captureThread = 0;
-
-	appPtr->streamer.camParams.cameraHandle = INVALID_HANDLE_VALUE;
-
-	//GUI-related stuff to follow:
-
-	appPtr->streamer.camParams.acquire = TRUE;
-	appPtr->streamer.camParams.doRender = TRUE;
-	//why quitting default true in original code?
-	appPtr->streamer.camParams.quitting = FALSE; 
-
-	appPtr->ui.drawableWindow_handle = 0;
-
-
-	return appPtr;
 }
 
 
-void lirena_captureApp_destroy(LirenaCaptureApp *appPtr)
+LirenaCaptureApp::~LirenaCaptureApp()
 {
-	g_free(appPtr);
-}
-
+	// TODO delete UI ptr
+	// TODO delete streamer ptr
+	
+	delete configPtr;
+	configPtr = nullptr;
+};
 
 
 

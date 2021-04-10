@@ -150,28 +150,32 @@ struct Frame
 class LirenaStreamer
 {
 	public:
-		LirenaStreamer(LirenaConfig const * configPtr);
+		LirenaStreamer(LirenaConfig * configPtr);
 
 		~LirenaStreamer();
 
 
+		bool setupCaptureDevice();
+		bool setupGStreamerPipeline();
 
+		bool launchCaptureThread();
+		bool terminateCaptureThread();
 
 
 private: //TODO make most of rest private
 public:
-		LirenaConfig const * configPtr = nullptr;
+		LirenaConfig * configPtr = nullptr;
 
 		//LirenaStreamer takes ownership of captureDevice
-		LirenaCaptureDevice* captureDevice = nullptr;
+		LirenaCaptureDevice* captureDevicePtr = nullptr;
 
+		pthread_t captureThread = 0;
+		bool captureThreadIsRunning = false;
 
 
 	//TODO put into appropriate LirenaCaptureDevice
 		LirenaXimeaStreamer_CameraParams camParams; //camParams;
 
-		pthread_t captureThread;
-		bool captureThreadIsRunning = false;
 
 		// for asynchronous processing of CUDA stuff: has to be initialized
 		//cv::cuda::Stream cudaDemoisaicStream;

@@ -105,14 +105,16 @@ class LirenaCaptureUI
         // like X threads shouldn't be messed with by delaying their init too much
         // returns if successfully initialized; returns false after first call,
         // to hint towards inner logical errors
-        static bool init(LirenaConfig const * config);
+        static bool init(LirenaConfig*  configPtr);
         
         // factory function to create subclasses based on device's type.
         // only Ximea and MagewellEco are currently supported
         static LirenaCaptureUI* createInstance(LirenaCaptureDevice* device);
 
+
     protected: //protected ctr, use factory function
-        LirenaCaptureUI(LirenaConfig const * config);
+    public: //TODO remove public, just make it compile for now
+        explicit LirenaCaptureUI(LirenaConfig const * config);
         
     public:
         virtual ~LirenaCaptureUI();
@@ -130,11 +132,15 @@ class LirenaCaptureUI
         // LirenaStreamer and
         // LirenaCaptureDevice (and its specializations)
 
-        LirenaConfig const * config;
+        LirenaConfig const * configPtr;
 
-        LirenaCaptureDevice* device;
+        // yes, const is at the right place: the pointee can be altered,
+        // the pointer itself not; i.e., 
+        // the used device does not change for the life time of the UI
+        LirenaCaptureDevice * const devicePtr;
 
-        //TODO outsource to GUI subclass
+
+       //TODO outsource to GUI subclass
         //useful for all GUI instances
 	    guintptr drawableWindow_handle;
 
@@ -144,7 +150,10 @@ class LirenaCaptureUI
 };
 
 
+// class LirenaCaptureASSGUI : public LirenaCaptureUI
+// {
 
+// }
 
 
 

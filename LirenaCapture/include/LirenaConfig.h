@@ -28,8 +28,16 @@ enum LirenaCaptureDeviceType
 
 
 
-struct LirenaConfig
+class LirenaConfig
 {
+  public:
+
+  LirenaConfig(int argc, char **argv);
+
+  //keep to init gtk, gst etc..
+  int argc;
+  char **argv;
+
   // host and IP are mandatory params; host's IP has different
   // meaning in TCP than in UDP.
   char const *IP;
@@ -88,14 +96,15 @@ struct LirenaConfig
     // default: false (at the moment,
     // but will change as soon as implemented)
     bool useCudaDemosaic;
-  } ximeaparams;
+  } 
+  ximeaparams;
 
 
 
 };
 
 //{ forwards:
-LirenaConfig parseArguments(int argc, char **argv);
+
 //}
 
 

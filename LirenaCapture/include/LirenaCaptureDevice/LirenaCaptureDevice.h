@@ -12,48 +12,74 @@ class LirenaConfig;
 
 
 
-// Factory function
-LirenaCaptureDevice* lirena_createCaptureDevice(
-  LirenaCaptureDeviceType type
-);
+
 
 //Abstract base class
 class LirenaCaptureDevice
 {
   public:
-
-    explicit LirenaCaptureDevice(LirenaConfig const* config);
+    // Factory function
+    static LirenaCaptureDevice* createCaptureDevice(
+      LirenaConfig * configPtr 
+    );
+  protected:
+    // do not instanciate directly 
+    // (pure abstractness omitted during refactoring)
+    explicit LirenaCaptureDevice(LirenaConfig * configPtr);
+  
+  public:
     virtual ~LirenaCaptureDevice();
-    virtual LirenaCaptureDeviceType getType() = 0;
-    virtual bool openDevice() = 0;
-    virtual bool setupParams() = 0;
-    virtual bool startVideoAquisition() = 0;
-    virtual bool getFrame();
-    virtual bool calcTiming();
+
+    LirenaCaptureDeviceType getType() {
+      return deviceType;
+    }
+
+    // dummy implementations to check workflow
     
-    bool acquireFrameMetadata();
-    bool pushFrameMetaDataToGstreamer();
-    virtual bool pushVideoFrameToGstreamer();
+    //setup
+    virtual bool openDevice() {return false;}
+    virtual bool setupParams()  {return false;}
+    virtual bool startVideoAquisition()  {return false;}
+
+    // acquisition, proecessing, enhancing (w/ metadata), "publishing"
+    virtual bool getFrame() {return false;}
+    virtual bool postProcessFrame() {return false;}
+    virtual bool calcTiming() {return false;}
+    virtual bool acquireFrameMetadata() {return false;}
+    
+    bool pushFrameMetaDataToGstreamer() {return false;}
+    virtual bool pushVideoFrameToGstreamer() {return false;}
 
 
   protected: 
-    LirenaConfig const * m_config;
+    LirenaConfig  * configPtr = nullptr;
+    LirenaCaptureDeviceType deviceType = LIRENA_CAPTURE_DEVICE_TYPE_invalid;
 };
 
 
 //TODO outsource
 class LirenaXimeaCaptureDevice : public LirenaCaptureDevice
 {
-  virtual ~LirenaXimeaCaptureDevice();
-  virtual LirenaCaptureDeviceType getType();
+  public:
+
+    explicit LirenaXimeaCaptureDevice(LirenaConfig * configPtr);
+
+
+    virtual ~LirenaXimeaCaptureDevice();
+
 
 };
 
 //TODO outsource
 class LirenaMagewellEcoCaptureDevice : public LirenaCaptureDevice
 {
-  virtual ~LirenaMagewellEcoCaptureDevice();
-  virtual LirenaCaptureDeviceType getType();
+  public:
+  
+    explicit LirenaMagewellEcoCaptureDevice(LirenaConfig * configPtr);
+  
+
+    virtual ~LirenaMagewellEcoCaptureDevice();
+
 
 };
 
