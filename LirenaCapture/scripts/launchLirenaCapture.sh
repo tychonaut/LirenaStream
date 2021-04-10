@@ -3,6 +3,9 @@
 # launch script / snippets with common param combinations
 
 # launch MagewellEco without GUI, but with local show&dump
+
+ninja -C builddir
+
 GST_DEBUG=3,appsrc:6 \
 __GL_SYNC_TO_VBLANK=0 \
 ./builddir/lirenaCapture \
@@ -10,6 +13,7 @@ __GL_SYNC_TO_VBLANK=0 \
     -d MagewellEco \
     --localdisplay \
     -o mydump.mpg \
+    $@
     
 exit 0
 

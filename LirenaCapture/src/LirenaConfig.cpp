@@ -185,7 +185,15 @@ LirenaConfig parseArguments(int argc, char **argv)
        be reflected in arguments. */
     argp_parse (&argp, argc, argv, 0, 0, &ret);
 
-// dlgofxytec
+
+    if(ret.haveLocalGUI && 
+      ret.captureDeviceType != LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera)
+    {
+      printf("%s", "Error: GUI is currently only supported for Ximea device! Disabling GUI option...\n");
+      ret.haveLocalGUI = false;
+    }
+
+    // dlgofxytec
     printf ("IP = %s\n"
             "Port = %s\n"
             "Capture device type: %s\n"
@@ -208,7 +216,7 @@ LirenaConfig parseArguments(int argc, char **argv)
               "MagewellEco (capture card)" 
               : "unsupported device type (internal error!)"
               ,
-              
+
             ret.targetFPS,
             ret.targetResolutionX, ret.targetResolutionY,
 
