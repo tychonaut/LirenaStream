@@ -13,10 +13,16 @@
 enum LirenaCaptureDeviceType
 {
   LIRENA_CAPTURE_DEVICE_TYPE_invalid            = 0,
-  LIRENA_CAPTURE_DEVICE_TYPE_gstTestSrc         = 1,
+  
+  //gstreamer dummy (untested yet)
+  LIRENA_CAPTURE_DEVICE_TYPE_videotestsrc       = 1,
+  //gstreamer dummy (untested yet)
   LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera        = 2,
+  //gstreamer dummy (untested yet)
   LIRENA_CAPTURE_DEVICE_TYPE_MagewellEcoCapture = 3,
+  //gstreamer dummy (not supported yet)
   LIRENA_CAPTURE_DEVICE_TYPE_MagewellProCapture = 4,
+
   LIRENA_CAPTURE_DEVICE_TYPE_NUM_DEVICE_TYPES   = 5
 };
 
@@ -29,7 +35,7 @@ struct LirenaConfig
   char const *IP;
   char const *port;
 
-
+  // default: XimeaCamera
   LirenaCaptureDeviceType captureDeviceType;
 
   // Resolution params may be ignored depending 
