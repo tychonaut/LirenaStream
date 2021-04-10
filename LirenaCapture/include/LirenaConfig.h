@@ -8,6 +8,8 @@
 #include <argp.h> // CLI arguments parsing
 
 
+// LirenaCaptureDeviceType has te be defined before 
+// LirenaConfig if not wanting to use ugly typedefs to int
 enum LirenaCaptureDeviceType
 {
   LIRENA_CAPTURE_DEVICE_TYPE_invalid            = 0,
@@ -17,8 +19,6 @@ enum LirenaCaptureDeviceType
   LIRENA_CAPTURE_DEVICE_TYPE_MagewellProCapture = 4,
   LIRENA_CAPTURE_DEVICE_TYPE_NUM_DEVICE_TYPES   = 5
 };
-
-
 
 
 
@@ -32,6 +32,16 @@ struct LirenaConfig
 
   LirenaCaptureDeviceType captureDeviceType;
 
+  // Resolution params may be ignored depending 
+  // on device type and capturing mode
+  // default: -1, meaning automatic
+  int targetResolutionX;
+  int targetResolutionY;
+
+  // FPS param may be ignored depending on capturing mode
+  // default: -1, meaning automatic
+  int targetFPS;
+
 
   // FOR DEBUGGING ONLY! Slows down pipeline, 
   // SEVERELY messing up UDP streaming to the point
@@ -42,7 +52,7 @@ struct LirenaConfig
   // So REALLY ONLY USE FOR DEBUGGING, NOT IN PRODUCTION!!
   // default: false
   bool doLocalDisplay;
-  // haveLocalGUI;
+  bool haveLocalGUI;
 
   // FOR DEBUGGING ONLY! Same warning as with local display!
   // default: NULL
@@ -58,7 +68,10 @@ struct LirenaConfig
   bool useTCP; 
 
  
-  // device dependent stuff:
+
+
+
+  // device dependent stuff to come: ---
   
   struct XimeaParams
   {
@@ -66,6 +79,8 @@ struct LirenaConfig
     // currently it is mostly a hacky way of 
     // roughly controlling capture framerate
     int exposure_ms;
+    // default: false (at the moment,
+    // but will change as soon as implemented)
     bool useCudaDemosaic;
   } ximeaparams;
 
@@ -78,49 +93,7 @@ LirenaConfig parseArguments(int argc, char **argv);
 //}
 
 
-//TODO outsource
 
-class LirenaCaptureDevice;
-// Factory function
-LirenaCaptureDevice* lirena_createCaptureDevice(
-  LirenaCaptureDeviceType type
-);
-
-class LirenaCaptureDevice
-{
-  public:
-
-    explicit LirenaCaptureDevice(LirenaConfig const* config);
-    virtual ~LirenaCaptureDevice();
-    virtual LirenaCaptureDeviceType getType() = 0;
-    virtual bool openDevice() = 0;
-    virtual bool setupParams() = 0;
-    virtual bool startVideoAquisition() = 0;
-    virtual bool getFrame();
-    virtual bool calcTiming();
-    
-    bool acquireFrameMetadata();
-    bool pushFrameMetaDataToGstreamer();
-    virtual bool pushVideoFrameToGstreamer();
-
-
-  protected: 
-    LirenaConfig const * m_config;
-};
-
-class LirenaXimeaCaptureDevice : public LirenaCaptureDevice
-{
-  virtual ~LirenaXimeaCaptureDevice();
-  virtual LirenaCaptureDeviceType getType();
-
-};
-
-class LirenaMagewellEcoCaptureDevice : public LirenaCaptureDevice
-{
-  virtual ~LirenaMagewellEcoCaptureDevice();
-  virtual LirenaCaptureDeviceType getType();
-
-};
 
 
 #endif //__LIRENA_CONFIG_H__

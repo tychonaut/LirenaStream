@@ -10,6 +10,20 @@
 #include <gst/gst.h>
 
 
+/*
+	TODO:
+	 	- rename LirenaXimeaStreamer struct and files to LirenaStreamer,
+		  Use LirenaCaptureDevice as members for internal differentiation
+		- ditch c-style OO-interface; I wanted to practice 
+		  "GLib-style pure-C OO programming", to be better prepared for 
+		  gst plugin development, but the boilerplate 
+		  becomes more and more annoying, and time pressure enforces 
+		  quick results over future synergies
+*/
+
+
+
+
 //----------------------------------------------------------------------------
 // Macros
 #define LIRENA_STATUS_STRING_LENGTH 4096

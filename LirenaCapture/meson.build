@@ -124,9 +124,13 @@ incdir = include_directories('include')
 exe_source_files = [
   'src/LirenaCaptureApp.cpp',
   'src/LirenaConfig.cpp',
-  'src/LirenaXimeaStreamer.cpp',
+  'src/LirenaCaptureDevice/LirenaCaptureDevice.cpp',
+  'src/LirenaCaptureDevice/LirenaXimeaCaptureDevice.cpp',
+  'src/LirenaCaptureDevice/LirenaMagewellEcoCaptureDevice.cpp',
   'src/LirenaKLVappsrc.cpp',
-  'src/LirenaCaptureDisplayController.cpp']
+  'src/LirenaCaptureDisplayController.cpp',
+  'src/LirenaXimeaStreamer.cpp',
+]
 
 executable('lirenaCapture',
   exe_source_files,
