@@ -144,10 +144,7 @@ class LirenaCaptureUI
 };
 
 
-// class LirenaCaptureASSGUI : public LirenaCaptureUI
-// {
 
-// }
 
 
 

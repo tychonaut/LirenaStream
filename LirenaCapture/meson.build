@@ -121,15 +121,19 @@ install_directory = get_option('install_directory')
 incdir = include_directories('include')
 
 
+
 exe_source_files = [
   'src/LirenaCaptureApp.cpp',
   'src/LirenaConfig.cpp',
+  'src/LirenaStreamer.cpp',
+  'src/LirenaKLVappsrc.cpp',
   'src/LirenaCaptureDevice/LirenaCaptureDevice.cpp',
   'src/LirenaCaptureDevice/LirenaXimeaCaptureDevice.cpp',
   'src/LirenaCaptureDevice/LirenaMagewellEcoCaptureDevice.cpp',
-  'src/LirenaKLVappsrc.cpp',
-  'src/LirenaCaptureDisplayController.cpp',
-  'src/LirenaXimeaStreamer.cpp',
+  'src/LirenaCaptureUI/LirenaCaptureUI.cpp',
+  'src/LirenaCaptureUI/LirenaCaptureGUI.cpp',
+  'src/LirenaCaptureUI/LirenaCaptureXimeaGUI.cpp',
+  'src/LirenaCaptureUI/LirenaCaptureMagewellEcoGUI.cpp',
 ]
 
 executable('lirenaCapture',

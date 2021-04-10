@@ -1,6 +1,6 @@
 
 
-#include "LirenaXimeaStreamer.h"
+#include "LirenaStreamer.h"
 
 #include "LirenaCaptureApp.h"
 #include "LirenaKLVappsrc.h"

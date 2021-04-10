@@ -3,7 +3,7 @@
 
 
 #include "LirenaConfig.h"
-#include "LirenaXimeaStreamer.h"
+#include "LirenaStreamer.h"
 // #include "LirenaKLVappsrc.h"
 
 #include "LirenaCaptureDisplayController.h"
