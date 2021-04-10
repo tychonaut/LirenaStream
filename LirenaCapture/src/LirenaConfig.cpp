@@ -72,10 +72,8 @@ parse_opt (int key, char *arg, struct argp_state *state)
       myArgs->useTCP = true;
       break;
 
-    
-
     case 'e':
-      myArgs->exposure_ms = atoi(arg);
+      myArgs->ximeaparams.exposure_ms = atoi(arg);
       break;
 
     case ARGP_KEY_END:
@@ -108,7 +106,7 @@ LirenaConfig parseArguments(int argc, char **argv)
     ret.doLocalDisplay = false;
     ret.outputFile = nullptr;
     ret.useTCP = false;
-    ret.exposure_ms = 30;
+    ret.ximeaparams.exposure_ms = 30;
     
     /* Parse our arguments; every option seen by parse_opt will
        be reflected in arguments. */
@@ -122,7 +120,7 @@ LirenaConfig parseArguments(int argc, char **argv)
             "OUTPUT_FILE = %s\n",
             ret.IP, 
             ret.port,
-            ret.exposure_ms,
+            ret.ximeaparams.exposure_ms,
             ret.doLocalDisplay ? "yes" : "no",
             ret.useTCP ? "yes" : "no",
             ret.outputFile ? ret.outputFile : "-none-"

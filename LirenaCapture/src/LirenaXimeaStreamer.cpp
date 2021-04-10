@@ -102,11 +102,12 @@ gboolean lirena_XimeaStreamer_setupCamParams(
 		// set exposure in microseconds from CLI arg
 		xiSetParamInt(cameraHandle, 
 			XI_PRM_EXPOSURE, 
-			1000 * config->exposure_ms);
+			1000 * config->ximeaparams.exposure_ms);
 	}
 
 	return TRUE;
 }
+ 
 
 
 
@@ -114,8 +115,205 @@ gboolean lirena_XimeaStreamer_setupCamParams(
 
 
 
+//return string must be g_freed'd
+gchar* constructGstreamerPipelineString(LirenaConfig const * config)
+{
+	// ten thousand chars are hopefully sufficient...
+	#define LIRENA_MAX_GSTREAMER_PIPELINE_STRING_LENGTH 10000
+	#define LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH 1000
+
+	gchar*  gstreamerPipelineString = (gchar*) g_malloc0(
+		LIRENA_MAX_GSTREAMER_PIPELINE_STRING_LENGTH);
+	
+	gchar gstreamerPreProcessingString[
+		LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
+	gchar gstreamerForkString_raw_to_show_and_enc[
+		LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
+	gchar gstreamerForkString_enc_to_disk_and_UDP[
+		LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
+	gchar gStreamerNetworkTransmissionSnippet    [
+		LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
+
+	// init snippets to empty string:
+	g_snprintf(gstreamerPreProcessingString,
+			   (gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+			   "%s", "");
+	g_snprintf(gstreamerForkString_raw_to_show_and_enc,
+			   (gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+			   "%s", "");
+	g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
+			   (gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+			   "%s", "");
+	g_snprintf(gStreamerNetworkTransmissionSnippet,
+			   (gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+			   "%s", "");
 
 
+	if (config->captureDeviceType != LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera)
+	{
+		if(config->ximeaparams.useCudaDemosaic)
+		{
+			g_assert(0 && "cuda demosaicing not implemented yet");
+			g_snprintf(gstreamerPreProcessingString,
+				(gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+				"TODO"
+			);
+		}
+		else
+		{
+			//software demosaic in gstreamer:
+			g_snprintf(gstreamerPreProcessingString,
+				(gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+			    "   video/x-bayer ! "
+			    " bayer2rgb ! "
+			    "   video/x-raw, format=(string)BGRx ! "
+			    " videoconvert ! "
+			);
+
+		}
+	} else	
+	{
+		// just a plain old videoconvert for now
+			//software demosaic in gstreamer:
+			g_snprintf(gstreamerPreProcessingString,
+				(gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+			    "   video/x-raw! "
+			    " videoconvert ! "
+			);
+	}
+
+
+
+	if (config->doLocalDisplay)
+	{
+		g_snprintf(gstreamerForkString_raw_to_show_and_enc,
+				   (gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+				   "%s",
+				   " tee name=fork_raw_to_show_and_enc "
+				   ""
+				   " fork_raw_to_show_and_enc. ! "
+				   " queue ! "
+				   " videoscale add-borders=TRUE ! "
+				   " capsfilter name=scale_element ! "
+				   " videoconvert ! "
+				   " xvimagesink "
+				   ""
+				   " fork_raw_to_show_and_enc. ! ");
+	}
+
+	if (config->outputFile)
+	{
+		/*
+          Inject dump-to-disk:
+          [encoded stream incoming] -> write to disk
+	                                \-> [to stream as RTP over UDP]
+        */
+		g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
+				   (gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+				   // TODO maybe add " h264parse disable-passthrough=true ! "
+				   " tee name=fork_enc_to_disk_and_UDP "
+				   ""
+				   " fork_enc_to_disk_and_UDP. ! "
+				   " queue ! "
+				   " filesink location=%s "
+				   ""
+				   " fork_enc_to_disk_and_UDP. ! "
+				   " queue ! ",
+				   config->outputFile);
+	}
+
+	if (config->useTCP)
+	{
+		//TCP
+		GST_WARNING("%s", "Using TCP instead of UDP: "
+						  "This is experimental an my not work!");
+
+		g_snprintf(gStreamerNetworkTransmissionSnippet,
+				   (gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+				   " rtpstreampay ! " // wrap RTP stuff another time for TCP ... (?)
+				   "  application/x-rtp-stream ! "
+				   " tcpserversink "
+				   "   host=%s "
+				   "   port=%s "
+				   //"   sync-method=burst "
+				   "  sync-method=next-keyframe " // works, but only for single-output recedeiver pipelines
+				   //"   sync-method=latest " //  works, but also no batter than next-keyframe
+				   ,
+				   config->IP,
+				   config->port);
+	}
+	else
+	{
+		//UDP
+		g_snprintf(gStreamerNetworkTransmissionSnippet,
+				   (gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+				   " udpsink "
+				   "   host=%s"
+				   "   port=%s"
+				   "   sync=true ", // sync=false
+				   config->IP,
+				   config->port);
+	}
+	//gStreamerNetworkTransmissionSnippet
+
+	/*
+	    Full pipeline (stuff in brackets is optional):
+	    
+	    cam [-> show on screen]
+	        \-> hardware encode h264 
+	                 \ 
+	                  >   wrap in mpegts [-> write to disk ]
+	    klv ---------/                   \-> stream per as RTP over UDP                                                
+    */
+	g_snprintf(gstreamerPipelineString,
+			   (gulong) LIRENA_MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
+			   // Mpeg2TS muxer:
+			   //" mpegtsmux name=mp2ts_muxer alignment=0 "
+			   //""
+			   // KLV appsrc to  muxer:
+			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=klvSrc ! "
+			   "   meta/x-klv, parsed=true ! "
+			   " mpegtsmux name=mp2ts_muxer alignment=0 " //TODO check: maybe alignment 7 for UDP!? as gstinspect says!
+			   //"  mpegtsmux."
+			   ""
+			   // Video appsrc, encode h264, to muxer:
+			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=captureAppSrc ! "
+			   ""
+			   //{ 
+			   // Preprcessing: either of:
+			   // 1.  gstreamer software-debayering (ximea stuff that worked before returning the test cam), 
+			   // 2.  special filter caps for non-gstreamer cuda-debayered cuda-memory
+			   //       and then xvvidconv or so instead of videoconvert ... TODO as soon as cams are here!
+			   // 3.  just videoconvert (magewell stuff) TODO try ASAP
+			   " %s "
+			   //}
+               ""
+			   " %s " // optional fork to local display
+			   " queue ! "
+			   " nvvidconv ! "
+			   " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
+			   " h264parse  disable-passthrough=true ! " //config-interval=-1  <--may be required in TCP?...
+			   " mp2ts_muxer. "
+			   ""
+			   // prepare muxed stream for network transmission:
+			   " mp2ts_muxer.! "
+			   "   tsparse ! "
+			   "   queue max-size-time=30000000000 max-size-bytes=0 max-size-buffers=0 ! "
+			   "   %s " // optional fork to dump-to-disk
+			   "   rtpmp2tpay ! "
+			   ""
+			   // send over network via UDP or optionally TCP
+			   " %s ",
+			   gstreamerPreProcessingString,
+			   gstreamerForkString_raw_to_show_and_enc,
+			   gstreamerForkString_enc_to_disk_and_UDP,
+			   gStreamerNetworkTransmissionSnippet);
+
+	GST_INFO("HERE MY PIPELINE: %s", gstreamerPipelineString);
+	sleep(1);
+
+	return gstreamerPipelineString;
+}
 
 
 
@@ -135,27 +333,30 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 	bool haveGUI = appPtr->config.doLocalDisplay;
 
+	
 	GstElement *pipeline = 0;
 	GstElement *appsrc_video = 0;
 	GstElement *appsrc_klv = 0;
-	GstElement *scale_element = 0;
-	//GstElement *mpegtsmux = 0;
-
-	GstBus *bus = 0;
 
 	GstBuffer *video_frame_GstBuffer = 0;
 	GstBuffer *klv_frame_GstBuffer = 0;
 
+	// to adapt for debayer stuff:
 	GstCaps *appsrc_video_caps = 0;
-	GstCaps *size_caps = 0;
-	//GstCaps *appsrc_klv_caps = 0;
-
+	
 	GstFlowReturn ret;
+	
+	// for control of local image display:
+	GstBus *bus = 0;
+	GstElement *scale_element = 0;
+	GstCaps *size_caps = 0;
+	
 
 	int max_width = 1000;
 	int max_height = 1000;
 	int prev_width = -1;
 	int prev_height = -1;
+
 
 	gchar statistics_string[256];
 	unsigned long frames = 0;
@@ -165,7 +366,10 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 	unsigned long curtime, prevtime;
 	unsigned long firsttime = getcurus();
-	GstClockTime gst_defaultClock_prevTime = 0;
+	//GstClockTime gst_defaultClock_prevTime = 0;
+
+
+
 
 	XI_IMG_FORMAT prev_format = XI_RAW8;
 	XI_IMG image;
@@ -190,7 +394,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 		appPtr->localDisplayCtrl.widgets.videoWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 
 		gtk_window_set_title(
-			GTK_WINDOW(appPtr->localDisplayCtrl.widgets.videoWindow), "streamViewer");
+			GTK_WINDOW(appPtr->localDisplayCtrl.widgets.videoWindow), "captureAppSrc");
 		gtk_widget_set_double_buffered(
 			appPtr->localDisplayCtrl.widgets.videoWindow, FALSE);
 
@@ -222,157 +426,14 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 
 
-
-
-	// ten thousand chars are hopefully sufficient...
-	#define MAX_GSTREAMER_PIPELINE_STRING_LENGTH 10000
-	#define MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH 1000
-
-	gchar gstreamerPipelineString[MAX_GSTREAMER_PIPELINE_STRING_LENGTH];
-	gchar gstreamerForkString_raw_to_show_and_enc[MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
-	gchar gstreamerForkString_enc_to_disk_and_UDP[MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
-	gchar gStreamerNetworkTransmissionSnippet[MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH];
-
-	// init snippets to empty string:
-	g_snprintf(gstreamerForkString_raw_to_show_and_enc,
-			   (gulong)MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-			   "%s", "");
-	g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
-			   (gulong)MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-			   "%s", "");
-	g_snprintf(gStreamerNetworkTransmissionSnippet,
-			   (gulong)MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-			   "%s", "");
-
-	if (appPtr->config.doLocalDisplay)
-	{
-		g_snprintf(gstreamerForkString_raw_to_show_and_enc,
-				   (gulong)MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-				   "%s",
-				   " tee name=fork_raw_to_show_and_enc "
-				   ""
-				   " fork_raw_to_show_and_enc. ! "
-				   " queue ! "
-				   " videoscale add-borders=TRUE ! "
-				   " capsfilter name=scale_element ! "
-				   " videoconvert ! "
-				   " xvimagesink "
-				   ""
-				   " fork_raw_to_show_and_enc. ! ");
-	}
-
-	if (appPtr->config.outputFile)
-	{
-		/*
-          Inject dump-to-disk:
-          [encoded stream incoming] -> write to disk
-	                                \-> [to stream as RTP over UDP]
-        */
-		g_snprintf(gstreamerForkString_enc_to_disk_and_UDP,
-				   (gulong)MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-				   // TODO maybe add " h264parse disable-passthrough=true ! "
-				   " tee name=fork_enc_to_disk_and_UDP "
-				   ""
-				   " fork_enc_to_disk_and_UDP. ! "
-				   " queue ! "
-				   " filesink location=%s "
-				   ""
-				   " fork_enc_to_disk_and_UDP. ! "
-				   " queue ! ",
-				   appPtr->config.outputFile);
-	}
-
-	if (appPtr->config.useTCP)
-	{
-		//TCP
-		GST_WARNING("%s", "Using TCP instead of UDP: "
-						  "This is experimental an my not work!");
-
-		g_snprintf(gStreamerNetworkTransmissionSnippet,
-				   (gulong)MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-				   " rtpstreampay ! " // wrap RTP stuff another time for TCP ... (?)
-				   "  application/x-rtp-stream ! "
-				   " tcpserversink "
-				   "   host=%s "
-				   "   port=%s "
-				   //"   sync-method=burst "
-				   "  sync-method=next-keyframe " // works, but only for single-output recedeiver pipelines
-				   //"   sync-method=latest " //  works, but also no batter than next-keyframe
-				   ,
-				   appPtr->config.IP,
-				   appPtr->config.port);
-	}
-	else
-	{
-		//UDP
-		g_snprintf(gStreamerNetworkTransmissionSnippet,
-				   (gulong)MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-				   " udpsink "
-				   "   host=%s"
-				   "   port=%s"
-				   "   sync=true ", // sync=false
-				   appPtr->config.IP,
-				   appPtr->config.port);
-	}
-	//gStreamerNetworkTransmissionSnippet
-
-	/*
-	    Full pipeline (stuff in brackets is optional):
-	    
-	    cam [-> show on screen]
-	        \-> hardware encode h264 
-	                 \ 
-	                  >   wrap in mpegts [-> write to disk ]
-	    klv ---------/                   \-> stream per as RTP over UDP                                                
-    */
-	g_snprintf(gstreamerPipelineString,
-			   (gulong)MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
-			   // Mpeg2TS muxer:
-			   //" mpegtsmux name=mp2ts_muxer alignment=0 "
-			   //""
-			   // KLV appsrc to  muxer:
-			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=klvSrc ! "
-			   "   meta/x-klv, parsed=true ! "
-			   " mpegtsmux name=mp2ts_muxer alignment=0 " //maybe alignment 7 for UDP!? as gstinspect says!
-			   //"  mpegtsmux."
-			   ""
-			   // Video appsrc, encode h264, to muxer:
-			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=streamViewer ! "
-			   ""
-			   //{ software debayering by GStreamer itself
-			   //: TODO outsource to Cuda&OpenCV
-			   "   video/x-bayer ! "
-			   " bayer2rgb ! "
-			   "   video/x-raw, format=(string)BGRx ! "
-			   " videoconvert ! "
-			   //}
-
-			   " %s " // optional fork to local display
-			   " queue ! "
-			   " nvvidconv ! "
-			   " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
-			   " h264parse  disable-passthrough=true ! " //config-interval=-1  <--may be required in TCP?...
-			   " mp2ts_muxer. "
-			   ""
-			   // prepare muxed stream for network transmission:
-			   " mp2ts_muxer.! "
-			   "   tsparse ! "
-			   "   queue max-size-time=30000000000 max-size-bytes=0 max-size-buffers=0 ! "
-			   "   %s " // optional fork to dump-to-disk
-			   "   rtpmp2tpay ! "
-			   ""
-			   // send over network via UDP or optionally TCP
-			   " %s ",
-			   gstreamerForkString_raw_to_show_and_enc,
-			   gstreamerForkString_enc_to_disk_and_UDP,
-			   gStreamerNetworkTransmissionSnippet);
-
-	GST_INFO("HERE MY PIPELINE: %s", gstreamerPipelineString);
-	sleep(1);
+	gchar * gstreamerPipelineString = 
+		constructGstreamerPipelineString(&appPtr->config);
 
 	pipeline = gst_parse_launch(
 		gstreamerPipelineString,
 		NULL);
+
+	g_free(gstreamerPipelineString);
 
 	if (!pipeline)
 	{
@@ -393,7 +454,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 
 
-	appsrc_video = gst_bin_get_by_name(GST_BIN(pipeline), "streamViewer");
+	appsrc_video = gst_bin_get_by_name(GST_BIN(pipeline), "captureAppSrc");
 	appsrc_klv = gst_bin_get_by_name(GST_BIN(pipeline), "klvSrc");
 
 	scale_element = gst_bin_get_by_name(GST_BIN(pipeline), "scale_element");
@@ -402,7 +463,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 	firsttime = getcurus();
 	prevtime = getcurus();
 
-	gst_defaultClock_prevTime = GST_ELEMENT(pipeline)->base_time;
+	//gst_defaultClock_prevTime = GST_ELEMENT(pipeline)->base_time;
 
 	while (appPtr->streamer.camParams.acquire)
 	{
@@ -603,11 +664,11 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			GST_DEBUG("myPTS_timestamp: %lu", myPTS_timestamp);
 
 			//just test
-			guint64 myDuration = // abs_time - gst_defaultClock_prevTime;
+			//guint64 myDuration = // abs_time - gst_defaultClock_prevTime;
 				gst_util_uint64_scale_int(
-					1, appPtr->config.exposure_ms * GST_MSECOND, 1);
+					1, appPtr->config.ximeaparams.exposure_ms * GST_MSECOND, 1);
 			//update for next frame
-			gst_defaultClock_prevTime = abs_time;
+			//gst_defaultClock_prevTime = abs_time;
 
 			GST_BUFFER_PTS(video_frame_GstBuffer) = myPTS_timestamp;
 			//GST_BUFFER_DURATION (video_frame_GstBuffer) = myDuration;
@@ -735,7 +796,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			}
 			else
 			{
-				GST_INFO(statistics_string);
+				GST_INFO("%s",statistics_string);
 			}
 
 			prevframes = frames;

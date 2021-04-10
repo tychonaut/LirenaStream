@@ -39,7 +39,7 @@ bool lirenaCaptureDisplayController_setupWidgets(LirenaCaptureDisplayController 
 	dispCtrl->widgets.show = gtk_toggle_button_new_with_label("Live view");
 	dispCtrl->widgets.run = gtk_toggle_button_new_with_label("Acquisition");
 	//tune them
-	gtk_window_set_title(GTK_WINDOW(dispCtrl->widgets.controlWindow), "streamViewer control");
+	gtk_window_set_title(GTK_WINDOW(dispCtrl->widgets.controlWindow), "capture control");
 	gtk_window_set_keep_above(GTK_WINDOW(dispCtrl->widgets.controlWindow), TRUE);
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dispCtrl->widgets.raw), TRUE);
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dispCtrl->widgets.show), TRUE);
@@ -184,10 +184,11 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 			xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_AUTO_WB, 1);
 
 		// set exposure from CLI arg
-		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_EXPOSURE, 1000 * appPtr->config.exposure_ms);
+		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_EXPOSURE, 
+			1000 * appPtr->config.ximeaparams.exposure_ms);
 		gtk_adjustment_set_value(
 			gtk_range_get_adjustment(GTK_RANGE(widgets->exp)),
-			appPtr->config.exposure_ms);
+			appPtr->config.ximeaparams.exposure_ms);
 
 		if (pthread_create(&appPtr->streamer.captureThread,
 						   NULL, lirena_XimeaStreamer_captureThread_run, (void *)appPtr))
