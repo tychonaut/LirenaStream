@@ -17,20 +17,24 @@
 //----------------------------------------------------------------------------
 // Type definitions
 
-struct LirenaCaptureApp
+class LirenaCaptureApp
 {
-	LirenaConfig config;
+    public:
+        LirenaConfig config;
 
-    LirenaXimeaStreamer streamer;    
-    
-    // non-GUI loop for bus-listening,
-    // in case local displaying is not requested;
-    // probably not nececcary as long as no listening to 
-    // any messages ;()
-    GMainLoop *pureLoop;
+        LirenaStreamer streamer;
 
-    //GUI stuff
-	LirenaCaptureDisplayController localDisplayCtrl;
+        // UI stuff
+        // TODO make pointer cause actract and factory...
+        LirenaCaptureUI ui;
+        
+        //TODO outsource to LirenaNetworkUI
+        // non-GUI loop for bus-listening,
+        // in case local displaying is not requested;
+        // probably not nececcary as long as no listening to 
+        // any messages ;()
+        GMainLoop *pureMainLoop;
+
 };
 
 

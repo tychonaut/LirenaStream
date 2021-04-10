@@ -52,7 +52,7 @@ int main(int argc, char **argv)
 {
 	LirenaCaptureApp *appPtr = lirena_captureApp_create(argc, argv);
 
-	//TODO find out if this threading- gui mess can be reordered/reduced...
+	//TODO find out if this threading- ui mess can be reordered/reduced...
 	if(appPtr->config.doLocalDisplay)
 	{
 		#ifdef GDK_WINDOWING_X11
@@ -62,6 +62,8 @@ int main(int argc, char **argv)
 		gdk_threads_init();
 
 		gdk_threads_enter();
+
+	  	gtk_init(&argc, &argv);
 	}
 		
 
@@ -70,21 +72,12 @@ int main(int argc, char **argv)
 
 	if(appPtr->config.doLocalDisplay)
 	{
-	  	gtk_init(&argc, &argv);
-
-		bool success = lirenaCaptureDisplayController_setupWidgets(&appPtr->localDisplayCtrl);
-
-		success &= lirenaCaptureDisplayController_setupCallbacks(appPtr);
-
-			
+		bool success = lirenaCaptureDisplayController_setupWidgets(&appPtr->ui);
+		success &= lirenaCaptureDisplayController_setupCallbacks(appPtr);		
 		//show GUI windows
-		gtk_widget_show_all(appPtr->localDisplayCtrl.widgets.controlWindow);
-		
-
+		gtk_widget_show_all(appPtr->ui.widgets.controlWindow);
 		//start the GUI main loop
 		gtk_main();
-
-
 		//exit program
 		gdk_threads_leave();
 	}
@@ -93,7 +86,7 @@ int main(int argc, char **argv)
 		// No-GUI- start-up:
 
 		//non-GUI-glib main loop for GStreamer
-		appPtr->pureLoop = g_main_loop_new (NULL, FALSE);
+		appPtr->pureMainLoop = g_main_loop_new (NULL, FALSE);
 
 		if (//shall capture ?
 			appPtr->streamer.camParams.acquire 
@@ -145,7 +138,7 @@ int main(int argc, char **argv)
 		}
 
 		//non-GUI bus listening (no callbacks specced right now, though)
-		g_main_loop_run(appPtr->pureLoop);
+		g_main_loop_run(appPtr->pureMainLoop);
 
 	}	
 
@@ -194,7 +187,7 @@ LirenaCaptureApp *lirena_captureApp_create(int argc, char **argv)
 	//why quitting default true in original code?
 	appPtr->streamer.camParams.quitting = FALSE; 
 
-	appPtr->localDisplayCtrl.drawableWindow_handle = 0;
+	appPtr->ui.drawableWindow_handle = 0;
 
 
 	return appPtr;

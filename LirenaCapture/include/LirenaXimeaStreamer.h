@@ -3,6 +3,7 @@
 
 
 #include "LirenaConfig.h"
+#include "LirenaCaptureDevice/LirenaCaptureDevice.h"
 
 
 #include <m3api/xiApi.h> //Ximea API
@@ -98,7 +99,7 @@ struct LirenaXimeaStreamer_CudaFrameData
 
 
 
-struct LirenaXimeaStreamer_FrameCaptureTimingData
+struct LirenaFrameCaptureTimingData
 {
     char statusString[LIRENA_STATUS_STRING_LENGTH];
 
@@ -115,21 +116,26 @@ struct LirenaXimeaStreamer_FrameCaptureTimingData
 };
 
 // dummy for later
-struct LirenaXimeaStreamer_NaviMetaData
+struct LirenaNaviMetaData
 {
 	int dummy_waitingForInputFromLightHouseGuys;
 };
 
-struct LirenaXimeaStreamer_FrameMetaData
+struct FrameMetaData
 {
-	LirenaXimeaStreamer_FrameCaptureTimingData   timingData;
-	LirenaXimeaStreamer_NaviMetaData             naviMeta;
+	LirenaFrameCaptureTimingData   timingData;
+	LirenaNaviMetaData             naviMeta;
 };
 
-
-struct LirenaXimeaStreamer_Frame
+struct Frame
 {
-	LirenaXimeaStreamer_FrameMetaData metaData;
+	struct MetaData
+	{
+		LirenaFrameCaptureTimingData   timingData;
+		LirenaNaviMetaData             naviMeta;
+	};
+
+	MetaData metaData;
 
 	LirenaXimeaStreamer_CudaFrameData cudaFrameData;
 
@@ -141,24 +147,41 @@ struct LirenaXimeaStreamer_Frame
 
 
 // Main "class" object:
-struct LirenaXimeaStreamer
+class LirenaStreamer
 {
-	LirenaConfig const * configPtr;
+	public:
+		LirenaStreamer(LirenaConfig const * configPtr);
 
-	LirenaXimeaStreamer_CameraParams camParams; //camParams;
+		~LirenaStreamer();
 
-    pthread_t captureThread;
-	bool captureThreadIsRunning = false;
 
-	// for asynchronous processing of CUDA stuff: has to be initialized
-    //cv::cuda::Stream cudaDemoisaicStream;
-    
-    // minimalistic memory pool for GPU matrix objects, used by cuda stream
-	LirenaXimeaStreamer_Frame framebufferPool[
-		LIRENA_XIMEA_STREAMER_MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES
-	];
 
-	//TODO put gstreamer Element objects here
+
+
+private: //TODO make most of rest private
+public:
+		LirenaConfig const * configPtr = nullptr;
+
+		//LirenaStreamer takes ownership of captureDevice
+		LirenaCaptureDevice* captureDevice = nullptr;
+
+
+
+	//TODO put into appropriate LirenaCaptureDevice
+		LirenaXimeaStreamer_CameraParams camParams; //camParams;
+
+		pthread_t captureThread;
+		bool captureThreadIsRunning = false;
+
+		// for asynchronous processing of CUDA stuff: has to be initialized
+		//cv::cuda::Stream cudaDemoisaicStream;
+		
+		// minimalistic memory pool for GPU matrix objects, used by cuda stream
+		Frame framebufferPool[
+			LIRENA_XIMEA_STREAMER_MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES
+		];
+
+		//TODO put gstreamer Element objects here
 };
 
 
@@ -176,19 +199,19 @@ struct LirenaXimeaStreamer
 //-----------------------------------------------------------------------------
 // function interface
 
-// LirenaXimeaStreamer * 
+// LirenaStreamer * 
 // lirena_XimeaStreamer_create(
 // 	LirenaConfig const * configPtr);
 
 // void 
 // lirena_XimeaStreamer_destroy(
-// 	LirenaXimeaStreamer * streamer);
+// 	LirenaStreamer * streamer);
 
 
 
 
 gboolean lirena_XimeaStreamer_openCamera(
-	LirenaXimeaStreamer* streamer
+	LirenaStreamer* streamer
 );
 gboolean lirena_XimeaStreamer_setupCamParams(
 	LirenaXimeaStreamer_CameraParams* camParams,
@@ -199,7 +222,7 @@ gboolean lirena_XimeaStreamer_setupCamParams(
 
 
 // TODO rename & restructure function, 
-// separate gui from capture&processing&streaming logic!
+// separate ui from capture&processing&streaming logic!
 void* lirena_XimeaStreamer_captureThread_run(void* appVoidPtr);
 
 struct LirenaCaptureApp;

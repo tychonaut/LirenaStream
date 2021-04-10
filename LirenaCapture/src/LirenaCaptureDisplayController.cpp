@@ -11,7 +11,7 @@
 //-----------------------------------------------------------------------------
 
 
-bool lirenaCaptureDisplayController_setupWidgets(LirenaCaptureDisplayController *dispCtrl)
+bool lirenaCaptureDisplayController_setupWidgets(LirenaCaptureUI *dispCtrl)
 {
 	//create widgets
 	dispCtrl->widgets.controlWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -108,31 +108,31 @@ bool lirenaCaptureDisplayController_setupCallbacks(LirenaCaptureApp * appPtr)
 
 
 	//this callback has important functionality that is also required without GUI
-	g_signal_connect(appPtr->localDisplayCtrl.widgets.run, "toggled",
+	g_signal_connect(appPtr->ui.widgets.run, "toggled",
 					 G_CALLBACK(lirenaCaptureDisplayController_initCam_startCaptureThread), (gpointer)appPtr); 
 
 
 
-	g_signal_connect(appPtr->localDisplayCtrl.widgets.raw, "toggled",
+	g_signal_connect(appPtr->ui.widgets.raw, "toggled",
 					 G_CALLBACK(lirenaCaptureDisplayController_setupCamParams), (gpointer)appPtr);
 
 
 
 
 
-	g_signal_connect(gtk_range_get_adjustment(GTK_RANGE(appPtr->localDisplayCtrl.widgets.gain)),
+	g_signal_connect(gtk_range_get_adjustment(GTK_RANGE(appPtr->ui.widgets.gain)),
 					 "value_changed", G_CALLBACK(update_gain), &appPtr->streamer.camParams);
-	g_signal_connect(gtk_range_get_adjustment(GTK_RANGE(appPtr->localDisplayCtrl.widgets.exp)),
+	g_signal_connect(gtk_range_get_adjustment(GTK_RANGE(appPtr->ui.widgets.exp)),
 					 "value_changed", G_CALLBACK(update_exposure), &appPtr->streamer.camParams);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplayCtrl.widgets.x0)),
+	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->ui.widgets.x0)),
 					 "value_changed", G_CALLBACK(update_x0), &appPtr->streamer.camParams);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplayCtrl.widgets.y0)),
+	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->ui.widgets.y0)),
 					 "value_changed", G_CALLBACK(update_y0), &appPtr->streamer.camParams);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplayCtrl.widgets.cx)),
+	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->ui.widgets.cx)),
 					 "value_changed", G_CALLBACK(update_cx), &appPtr->streamer.camParams);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->localDisplayCtrl.widgets.cy)),
+	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->ui.widgets.cy)),
 					 "value_changed", G_CALLBACK(update_cy), &appPtr->streamer.camParams);
-	g_signal_connect(appPtr->localDisplayCtrl.widgets.show, "toggled",
+	g_signal_connect(appPtr->ui.widgets.show, "toggled",
 					 G_CALLBACK(update_show), &appPtr->streamer.camParams);
 
 
@@ -143,7 +143,7 @@ bool lirenaCaptureDisplayController_setupCallbacks(LirenaCaptureApp * appPtr)
 	params->doShutDownApp = true; // do shutdown on closing of control window!
 	params->captureThreadPtr = &appPtr->streamer.captureThread;
 	params->camPtr= &appPtr->streamer.camParams;
-	g_signal_connect(appPtr->localDisplayCtrl.widgets.controlWindow,
+	g_signal_connect(appPtr->ui.widgets.controlWindow,
 					 "delete_event", G_CALLBACK(close_cb), params);
 
 
@@ -157,7 +157,7 @@ bool lirenaCaptureDisplayController_setupCallbacks(LirenaCaptureApp * appPtr)
 
 gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButton *run, LirenaCaptureApp *appPtr)
 {
-	LirenaCaptureWidgets *widgets = &appPtr->localDisplayCtrl.widgets;
+	LirenaXimeaCaptureWidgets *widgets = &appPtr->ui.widgets;
 
 	gtk_toggle_button_set_inconsistent(run, false);
 	appPtr->streamer.camParams.acquire = gtk_toggle_button_get_active(run);
@@ -177,18 +177,12 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 			appPtr->streamer.camParams.acquire = FALSE;
 			return TRUE;
 		}
-		lirenaCaptureDisplayController_setupCamParams(GTK_TOGGLE_BUTTON(widgets->raw), appPtr);
-		int isColor = 0;
-		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_IMAGE_IS_COLOR, &isColor);
-		if (isColor)
-			xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_AUTO_WB, 1);
 
-		// set exposure from CLI arg
-		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_EXPOSURE, 
-			1000 * appPtr->config.ximeaparams.exposure_ms);
-		gtk_adjustment_set_value(
-			gtk_range_get_adjustment(GTK_RANGE(widgets->exp)),
-			appPtr->config.ximeaparams.exposure_ms);
+
+		lirenaCaptureDisplayController_setupCamParams(GTK_TOGGLE_BUTTON(widgets->raw), appPtr);
+
+
+
 
 		if (pthread_create(&appPtr->streamer.captureThread,
 						   NULL, lirena_XimeaStreamer_captureThread_run, (void *)appPtr))
@@ -211,17 +205,23 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 
 gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, LirenaCaptureApp *appPtr)
 {
-	LirenaCaptureWidgets *widgets = &appPtr->localDisplayCtrl.widgets;
+	LirenaXimeaCaptureWidgets *widgets = &appPtr->ui.widgets;
 	HANDLE cameraHandle = appPtr->streamer.camParams.cameraHandle;
 
 	if (cameraHandle != INVALID_HANDLE_VALUE)
 	{
+		// query intrinsic device params
 		float mingain, maxgain;
-		xiSetParamInt(cameraHandle, XI_PRM_IMAGE_DATA_FORMAT, gtk_toggle_button_get_active(raw) ? XI_RAW8 : XI_RGB32);
+		xiSetParamInt(cameraHandle, XI_PRM_IMAGE_DATA_FORMAT, 
+			gtk_toggle_button_get_active(raw) ? XI_RAW8 : XI_RGB32);
 		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
 		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
 		xiGetParamInt(cameraHandle, XI_PRM_WIDTH XI_PRM_INFO_MAX, &appPtr->streamer.camParams.maxcx);
 		xiGetParamInt(cameraHandle, XI_PRM_HEIGHT XI_PRM_INFO_MAX, &appPtr->streamer.camParams.maxcy);
+		int isColor = 0;
+		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_IMAGE_IS_COLOR, &isColor);
+
+		// derive extrinsic device params
 		appPtr->streamer.camParams.roicx = appPtr->streamer.camParams.maxcx;
 		appPtr->streamer.camParams.roicy = appPtr->streamer.camParams.maxcy;
 		appPtr->streamer.camParams.roix0 = 0;
@@ -229,6 +229,27 @@ gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, Lir
 
 		float midgain = (maxgain + mingain) * 0.5f;
 
+
+		// assign extrinsic device params
+		xiSetParamFloat(cameraHandle, XI_PRM_GAIN, midgain);
+		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_X, appPtr->streamer.camParams.roix0);
+		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_Y, appPtr->streamer.camParams.roiy0);
+		xiSetParamInt(cameraHandle, XI_PRM_WIDTH,    appPtr->streamer.camParams.roicx);
+		xiSetParamInt(cameraHandle, XI_PRM_HEIGHT, appPtr->streamer.camParams.roicy);
+		
+		if (isColor)
+		{
+			xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_AUTO_WB, 1);
+		}
+
+		// set exposure from CLI arg
+		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_EXPOSURE, 
+			1000 * appPtr->config.ximeaparams.exposure_ms);
+
+
+
+
+		//adapt GUI widgets
 		gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(widgets->gain)),
 			midgain, mingain, maxgain, 0.1, 1, 0);
 		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
@@ -248,13 +269,10 @@ gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, Lir
 			appPtr->streamer.camParams.roicy, 2, 
 			appPtr->streamer.camParams.maxcy, 2, 20, 0);
 
-		//xiSetParamFloat(cameraHandle, XI_PRM_GAIN, mingain);
-		xiSetParamFloat(cameraHandle, XI_PRM_GAIN, midgain);
-		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_X, appPtr->streamer.camParams.roix0);
-		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_Y, appPtr->streamer.camParams.roiy0);
-		xiSetParamInt(cameraHandle, XI_PRM_WIDTH,    appPtr->streamer.camParams.roicx);
-		xiSetParamInt(cameraHandle, XI_PRM_HEIGHT, appPtr->streamer.camParams.roicy);
-		//exposure doesn't seem to be affected by format change
+		gtk_adjustment_set_value(
+			gtk_range_get_adjustment(GTK_RANGE(widgets->exp)),
+			appPtr->config.ximeaparams.exposure_ms);
+
 	}
 	return TRUE;
 }
@@ -276,27 +294,27 @@ gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(LirenaCaptureAp
 	{
 		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 1);
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.gpi1), level);
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->ui.widgets.gpi1), level);
 		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 2);
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.gpi2), level);
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->ui.widgets.gpi2), level);
 		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 3);
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.gpi3), level);
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->ui.widgets.gpi3), level);
 		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 4);
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.gpi4), level);
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->ui.widgets.gpi4), level);
 	}
 
 	gtk_toggle_button_set_inconsistent(
-		GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.run),
+		GTK_TOGGLE_BUTTON(appPtr->ui.widgets.run),
 		gtk_toggle_button_get_active(
-			GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.run)) != appPtr->streamer.camParams.acquire);
+			GTK_TOGGLE_BUTTON(appPtr->ui.widgets.run)) != appPtr->streamer.camParams.acquire);
 
-	gtk_widget_set_sensitive(appPtr->localDisplayCtrl.widgets.boxx, appPtr->streamer.camParams.acquire);
-	gtk_widget_set_sensitive(appPtr->localDisplayCtrl.widgets.boxy, appPtr->streamer.camParams.acquire);
-	gtk_widget_set_sensitive(appPtr->localDisplayCtrl.widgets.exp,  appPtr->streamer.camParams.acquire);
-	gtk_widget_set_sensitive(appPtr->localDisplayCtrl.widgets.gain, appPtr->streamer.camParams.acquire);
+	gtk_widget_set_sensitive(appPtr->ui.widgets.boxx, appPtr->streamer.camParams.acquire);
+	gtk_widget_set_sensitive(appPtr->ui.widgets.boxy, appPtr->streamer.camParams.acquire);
+	gtk_widget_set_sensitive(appPtr->ui.widgets.exp,  appPtr->streamer.camParams.acquire);
+	gtk_widget_set_sensitive(appPtr->ui.widgets.gain, appPtr->streamer.camParams.acquire);
 
 	return TRUE;
 }
@@ -318,7 +336,7 @@ gboolean lirenaCaptureDisplayController_startHack_cb(LirenaCaptureApp *appPtr)
 {
 	//start acquisition
 	lirenaCaptureDisplayController_initCam_startCaptureThread(
-		GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.run),
+		GTK_TOGGLE_BUTTON(appPtr->ui.widgets.run),
 		appPtr); 
 
 	return FALSE;
@@ -327,7 +345,7 @@ gboolean lirenaCaptureDisplayController_startHack_cb(LirenaCaptureApp *appPtr)
 
 
 GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *message, 
- 	LirenaCaptureDisplayController * displayCtrl) 
+ 	LirenaCaptureUI * displayCtrl) 
 {
 	if (!gst_is_video_overlay_prepare_window_handle_message(message))
 	{
@@ -345,7 +363,7 @@ GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *message,
 
 
 void video_widget_realize_cb(GtkWidget *widget, 
-	LirenaCaptureDisplayController* displayCtrl) 
+	LirenaCaptureUI* displayCtrl) 
 {
 	GdkWindow *window = gtk_widget_get_window(widget);
 	if (!gdk_window_ensure_native(window))

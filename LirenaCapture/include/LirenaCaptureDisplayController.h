@@ -27,6 +27,10 @@
 #include <m3api/xiApi.h>
 
 
+//fordwards:
+class LirenaCaptureDevice;
+
+
 
 // hack from Ximea as long as no good GstClock integrated...
 inline unsigned long getcurus() 
@@ -37,23 +41,24 @@ inline unsigned long getcurus()
 }
 
 
-
-
-
-
-struct LirenaCaptureWidgets 
+struct LirenaCaptureWidgets
 {
+    // Screen to grab window from, 
+    // so GStreamer knows where to render
+    // its xvimagesink stuff into
 	GdkScreen *screen;
-
-    //TODO rename stuff
-
     // render window stuff
 	GtkWidget *videoWindow;
-
-
     // control window stuff
     GtkWidget *controlWindow;
+};
 
+
+
+struct LirenaXimeaCaptureWidgets :
+    public LirenaCaptureWidgets
+{
+    //TODO rename stuff
     GtkWidget 
         *boxmain, 
         *boxgpi, 
@@ -86,14 +91,56 @@ struct LirenaCaptureWidgets
 
 
 
-
-
-struct LirenaCaptureDisplayController
+// UI Base class
+// Specializezes to GUI and NUI (network UI),
+// which in turn could specialize to 
+// LirenaXimeaNUI and LirenaXimeaGUI, 
+// LirenaMagewellEcoNUI and LirenaMagewellEcoGUI
+//TODO make this abstract base class
+class LirenaCaptureUI
 {
-	guintptr drawableWindow_handle;
+    public:
+        //call first and globally way before UI instance creation!
+        // This may be required because of low level stuff
+        // like X threads shouldn't be messed with by delaying their init too much
+        // returns if successfully initialized; returns false after first call,
+        // to hint towards inner logical errors
+        static bool init(LirenaConfig const * config);
+        
+        // factory function to create subclasses based on device's type.
+        // only Ximea and MagewellEco are currently supported
+        static LirenaCaptureUI* createInstance(LirenaCaptureDevice* device);
 
-    //TODO rename member to "widgets"
-	LirenaCaptureWidgets widgets;
+    protected: //protected ctr, use factory function
+        LirenaCaptureUI(LirenaConfig const * config);
+        
+    public:
+        virtual ~LirenaCaptureUI();
+
+
+        // Setup network sockets or widgets
+        //TODO make pure abstract and subclass
+        // replace lirenaCaptureDisplayController_setupWidgets
+        virtual bool setupUI();// = 0;
+
+        //replace lirenaCaptureDisplayController_setupCallbacks
+        virtual bool setupCallbacks();// = 0;
+
+        //n.b. all the rest of the logic is in 
+        // LirenaStreamer and
+        // LirenaCaptureDevice (and its specializations)
+
+        LirenaConfig const * config;
+
+        LirenaCaptureDevice* device;
+
+        //TODO outsource to GUI subclass
+        //useful for all GUI instances
+	    guintptr drawableWindow_handle;
+
+        //TODO rename to LirenaXimeaCaptureWidgets, outsource to subclass
+	    LirenaXimeaCaptureWidgets widgets;
+
 };
 
 
@@ -110,7 +157,7 @@ struct LirenaXimeaStreamer_CameraParams;
 
 //{ init GUI stuff
 bool lirenaCaptureDisplayController_setupWidgets(
-    LirenaCaptureDisplayController *dispCtrl);
+    LirenaCaptureUI *dispCtrl);
 bool lirenaCaptureDisplayController_setupCallbacks(
     LirenaCaptureApp * appPtr);
 //}
@@ -134,10 +181,10 @@ gboolean lirenaCaptureDisplayController_setupCamParams(
 //{ stuff to bind GStreamer renderings to an X/GDK/GTK window
 //  via videooverlay
 GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, 
-    LirenaCaptureDisplayController* displayCtrl);  //LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+    LirenaCaptureUI* displayCtrl);  //LirenaXimeaStreamer_CameraParams* cam); //gpointer)
 
 void video_widget_realize_cb(GtkWidget *widget, 
-	LirenaCaptureDisplayController* displayCtrl);
+	LirenaCaptureUI* displayCtrl);
 //}
 
 
