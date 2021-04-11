@@ -28,8 +28,8 @@
 
 
 //fordwards:
-class LirenaCaptureDevice;
-
+//class LirenaCaptureDevice;
+class LirenaStreamer;
 
 
 // hack from Ximea as long as no good GstClock integrated...
@@ -85,14 +85,15 @@ struct LirenaXimeaCaptureWidgets :
         *cy, 
 
         *raw, 
-        *show, 
+        //*show, 
         *run;
 };
 
 
 
-// UI Base class
-// Specializezes to GUI and NUI (network UI),
+// UI Base class, with "do nothing" dummy implementations,
+// so that not all the time the "hasGUI" flag needs to be checked.
+// Specializezes to GUI (Graphical UI) and NUI (Network UI (planned)),
 // which in turn could specialize to 
 // LirenaXimeaNUI and LirenaXimeaGUI, 
 // LirenaMagewellEcoNUI and LirenaMagewellEcoGUI
@@ -107,14 +108,14 @@ class LirenaCaptureUI
         // to hint towards inner logical errors
         static bool init(LirenaConfig*  configPtr);
         
-        // factory function to create subclasses based on device's type.
-        // only Ximea and MagewellEco are currently supported
-        static LirenaCaptureUI* createInstance(LirenaCaptureDevice* device);
+        // factory function to create subclasses based on streamer's capture device's type.
+        // Only Ximea and MagewellEco are currently supported
+        static LirenaCaptureUI * createInstance(LirenaStreamer* streamerPtr);
 
 
     protected: //protected ctr, use factory function
-    public: //TODO remove public, just make it compile for now
-        explicit LirenaCaptureUI(LirenaConfig const * config);
+    //public: //TODO remove public, just make it compile for now
+        explicit LirenaCaptureUI(LirenaStreamer* streamerPtr);
         
     public:
         virtual ~LirenaCaptureUI();
@@ -123,43 +124,80 @@ class LirenaCaptureUI
         // Setup network sockets or widgets
         //TODO make pure abstract and subclass
         // replace lirenaCaptureDisplayController_setupWidgets
-        virtual bool setupUI();// = 0;
+        virtual bool setupUI(){return true;}
 
         //replace lirenaCaptureDisplayController_setupCallbacks
-        virtual bool setupCallbacks();// = 0;
+        virtual bool setupCallbacks(){return true;}
 
-        //n.b. all the rest of the logic is in 
-        // LirenaStreamer and
-        // LirenaCaptureDevice (and its specializations)
-
-        LirenaConfig const * configPtr;
-
-        // yes, const is at the right place: the pointee can be altered,
-        // the pointer itself not; i.e., 
-        // the used device does not change for the life time of the UI
-        LirenaCaptureDevice * const devicePtr;
+        virtual bool shutdownUI(){return true;}
 
 
-       //TODO outsource to GUI subclass
+
+        //contains pointers to config and capture device, to all is there
+        // for the UI
+        LirenaStreamer* streamerPtr;
+
+
+
+    //TODO outsource to GUI subclass
         //useful for all GUI instances
-	    guintptr drawableWindow_handle;
-
-        //TODO rename to LirenaXimeaCaptureWidgets, outsource to subclass
+	    guintptr drawableWindow_handle = 0;
+        //TODO rename to  outsource to subclass
 	    LirenaXimeaCaptureWidgets widgets;
 
 };
 
 
-// class LirenaCaptureASSGUI : public LirenaCaptureUI
+//KISS --> no intermediat GUI class
+// class LirenaCaptureGUI : public LirenaCaptureUI
 // {
+//     public:
+//         explicit LirenaCaptureGUI(LirenaStreamer* streamerPtr);
+    
+//         //useful for all GUI instances
 
-// }
+// };
+
+
+class LirenaCaptureXimeaGUI : public LirenaCaptureUI
+{
+    public:
+        explicit LirenaCaptureXimeaGUI(LirenaStreamer* streamerPtr);
+        virtual ~LirenaCaptureXimeaGUI();
+
+        //TODO move from superclass here
+	    //guintptr drawableWindow_handle = 0;
+        //LirenaXimeaCaptureWidgets widgets;
+
+        virtual bool setupUI();//{return true;}
+
+        //replace lirenaCaptureDisplayController_setupCallbacks
+        virtual bool setupCallbacks();//{return true;}
+
+        virtual bool shutdownUI();//{return true;}
+};
+
+
+
+
+
+
+
+
+
+
+//----------------------------------------------------------------------------
+// old code below
+
 
 
 
 
 // Forward types for pointer params -------------------------------------------
-struct LirenaCaptureApp;
+class LirenaCaptureApp;
+class LirenaStreamer;
+
+//TODO rename
 struct LirenaXimeaStreamer_CameraParams;
 
 // function interface ----------------------------------------------------------
@@ -209,20 +247,9 @@ gboolean lirenaCaptureDisplayController_startHack_cb(
 
 
 
-// Messy hack to handle "shutdown app if CONTROL window is closed, 
-// but to sth ales if RENDER window is closed".
-// The original logic didn't even work in the first place...
-struct close_cb_params
-{
-	bool doShutDownApp;
-	//always non-null, but pointee kan be 0, implying thead is inactive
-	pthread_t* captureThreadPtr;
-    LirenaXimeaStreamer_CameraParams * camPtr;
-};
-
 gboolean close_cb(GtkWidget*, GdkEvent*,  
     //hack: need to be g_malloc'ed, then is g_free'd at and of callback.
-	close_cb_params * params);
+	LirenaStreamer* streamerPtr);
 
 
 
@@ -231,7 +258,7 @@ gboolean close_cb(GtkWidget*, GdkEvent*,
 
 
 //following only widget-to-cam-param stuff ------------------------------------
-gboolean update_show(GtkToggleButton *show,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+//gboolean update_show(GtkToggleButton *show,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
 gboolean update_gain(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
 gboolean update_exposure(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
 gboolean update_cy(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)

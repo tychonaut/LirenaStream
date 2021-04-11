@@ -47,12 +47,6 @@ struct LirenaXimeaStreamer_CameraParams
 	//cropping data, currently unused 
 	//(test cam doesn't seem to support)
 	int maxcx, maxcy, roix0, roiy0, roicx, roicy;
-
-	// following GUI-related stuff 
-	BOOLEAN acquire = TRUE;
-	// dunno what ximea devs were thinking about this...
-	BOOLEAN quitting = TRUE; 
-	BOOLEAN doRender = TRUE;
 };
 
 
@@ -169,8 +163,13 @@ public:
 		//LirenaStreamer takes ownership of captureDevice
 		LirenaCaptureDevice* captureDevicePtr = nullptr;
 
+		//modified by GUI thread to shut down capture thread
+		volatile BOOLEAN  doAcquireFrames = TRUE;
+
 		pthread_t captureThread = 0;
 		bool captureThreadIsRunning = false;
+
+		
 
 
 	//TODO put into appropriate LirenaCaptureDevice

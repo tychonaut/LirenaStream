@@ -27,11 +27,8 @@ LirenaStreamer::LirenaStreamer(LirenaConfig * configPtr)
 
 	//UI-related stuff to follow:
 
-	this->camParams.acquire = TRUE;
-	
-	this->camParams.doRender = TRUE;
-	//why quitting default true in original code?
-	this->camParams.quitting = FALSE; 
+	this->doAcquireFrames = TRUE;
+
 
 
 	captureDevicePtr = LirenaCaptureDevice::createCaptureDevice(
@@ -48,6 +45,7 @@ LirenaStreamer::~LirenaStreamer()
 		g_assert(captureThread != 0);
 
 		//TODO set acquire to false
+		doAcquireFrames=false;
 		pthread_join(captureThread, NULL);
 
 		captureThread = 0;
@@ -87,10 +85,10 @@ gboolean lirena_XimeaStreamer_openCamera(
 )
 {
 
-	streamer->camParams.acquire = TRUE;
+	streamer->doAcquireFrames = TRUE;
 
 	// open cam required?
-	if (streamer->camParams.acquire && 
+	if (streamer->doAcquireFrames && 
 	    streamer->camParams.cameraHandle == INVALID_HANDLE_VALUE)
 	{
 
@@ -106,7 +104,7 @@ gboolean lirena_XimeaStreamer_openCamera(
 		if (xiOpenDevice(nIndex, & streamer->camParams.cameraHandle) != XI_OK)
 		{
 			printf("Couldn't setup camera!\n");
-			streamer->camParams.acquire = FALSE;
+			streamer->doAcquireFrames = FALSE;
 			return FALSE; //TRUE in original ximea code 0o ...
 		}
 
@@ -470,15 +468,9 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 						G_CALLBACK(video_widget_realize_cb), 
 						appPtr->uiPtr);
 
-		// Messy hack to handle "shutdown app if CONTROL window is closed,
-		// but to sth ales if RENDER window is closed".
-		// The original logic didn't even work in the first place...
-		close_cb_params *params = (close_cb_params *)g_malloc0(sizeof(close_cb_params));
-		params->doShutDownApp = false; // do NOT shutdown on closing of control window!
-		params->captureThreadPtr = &appPtr->streamerPtr->captureThread;
-		params->camPtr= &appPtr->streamerPtr->camParams;
 		g_signal_connect(appPtr->uiPtr->widgets.videoWindow,
-						"delete-event", G_CALLBACK(close_cb), params);
+						"delete-event", G_CALLBACK(close_cb),
+						appPtr->streamerPtr);
 
 		gtk_widget_show_all(appPtr->uiPtr->widgets.videoWindow);
 		gtk_widget_realize(appPtr->uiPtr->widgets.videoWindow);
@@ -532,7 +524,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 	//gst_defaultClock_prevTime = GST_ELEMENT(pipeline)->base_time;
 
-	while (appPtr->streamerPtr->camParams.acquire)
+	while (appPtr->streamerPtr->doAcquireFrames)
 	{
 
 		// grab image
@@ -550,7 +542,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 		guint64 frame_capture_PTS = (guint64)(curtime - firsttime) * GST_USECOND;
 		//}
 
-		if (appPtr->streamerPtr->camParams.doRender)
+		if(true) // was "doRender"
 		{
 			unsigned long raw_image_buffer_size =
 				image.width * image.height * (image.frm == XI_RAW8 ? 1 : 4);
@@ -891,7 +883,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 
 
-void *lirena_XimeaStreamer_captureThread_terminate(LirenaCaptureApp *appPtr)
+void * lirena_XimeaStreamer_captureThread_terminate(LirenaCaptureApp *appPtr)
 {
 	bool haveGUI = appPtr->configPtr->doLocalDisplay;
 
@@ -899,32 +891,28 @@ void *lirena_XimeaStreamer_captureThread_terminate(LirenaCaptureApp *appPtr)
 	{
 		gdk_threads_enter();
 
-		gtk_widget_destroy(appPtr->uiPtr->widgets.videoWindow);
-		if (appPtr->streamerPtr->camParams.quitting)
-		{
-			gtk_main_quit();
-		}
+		// don't bother with window destruction, just shut down GTK
+		// the dirty way
+		//gtk_widget_destroy(appPtr->uiPtr->widgets.videoWindow);
+		
+		gtk_main_quit();
 		gdk_threads_leave();
 	}
-
-
-	xiStopAcquisition(appPtr->streamerPtr->camParams.cameraHandle);
-	appPtr->streamerPtr->camParams.acquire = FALSE;
-	xiCloseDevice(appPtr->streamerPtr->camParams.cameraHandle);
-	appPtr->streamerPtr->camParams.cameraHandle = INVALID_HANDLE_VALUE;
-
-    appPtr->streamerPtr->captureThreadIsRunning = false;
-	//appPtr->streamerPtr->captureThread = 0;
-
-	//could moving this up mean any further problem?
-	//gdk_threads_leave();
-	
-	// quit late, hoping to reduce hazards
-	if(!haveGUI)
+	else
 	{
 		g_main_loop_quit(appPtr->pureMainLoop);
 	}
 
+	xiStopAcquisition(appPtr->streamerPtr->camParams.cameraHandle);
+	appPtr->streamerPtr->doAcquireFrames = FALSE;
+	xiCloseDevice(appPtr->streamerPtr->camParams.cameraHandle);
+	appPtr->streamerPtr->camParams.cameraHandle = INVALID_HANDLE_VALUE;
+
+
+    appPtr->streamerPtr->captureThreadIsRunning = false;
+
+	//DON't mess with the thread ID from within the thread!
+	//appPtr->streamerPtr->captureThread = 0;
 
 	return NULL;
 }

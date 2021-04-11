@@ -54,6 +54,8 @@ int main(int argc, char **argv)
 	LirenaCaptureUI::init(configPtr);
 	LirenaCaptureApp *appPtr = new LirenaCaptureApp(configPtr);
 
+
+
 	delete appPtr;
 	appPtr = nullptr;
 
@@ -100,7 +102,7 @@ int main(int argc, char **argv)
 		appPtr->pureMainLoop = g_main_loop_new (NULL, FALSE);
 
 		if (//shall capture ?
-			appPtr->streamerPtr->camParams.acquire 
+			appPtr->streamerPtr->doAcquireFrames 
 		)
 		{
 			// open cam
@@ -156,7 +158,7 @@ int main(int argc, char **argv)
 
 	//exit program
 
-	appPtr->streamerPtr->camParams.acquire = FALSE;
+	appPtr->streamerPtr->doAcquireFrames = FALSE;
 	
 	if (appPtr->streamerPtr->captureThread != 0)
 	{
@@ -181,12 +183,10 @@ LirenaCaptureApp::LirenaCaptureApp(LirenaConfig * configPtr)
 	:
 	configPtr(configPtr),
 	streamerPtr( new LirenaStreamer(configPtr) ),
-
-	uiPtr( LirenaCaptureUI::createInstance (streamerPtr->captureDevicePtr))
+	uiPtr( LirenaCaptureUI::createInstance (streamerPtr) )
 {
 
-//TODO outsource
-	// appPtr->uiPtr->drawableWindow_handle = 0;
+
 
 
 
@@ -195,8 +195,11 @@ LirenaCaptureApp::LirenaCaptureApp(LirenaConfig * configPtr)
 
 LirenaCaptureApp::~LirenaCaptureApp()
 {
-	// TODO delete UI ptr
-	// TODO delete streamer ptr
+	delete uiPtr;
+	uiPtr = nullptr;
+
+	delete streamerPtr;
+	streamerPtr = nullptr;
 	
 	delete configPtr;
 	configPtr = nullptr;
