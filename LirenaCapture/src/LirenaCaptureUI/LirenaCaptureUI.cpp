@@ -369,7 +369,6 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallback
 
 	// adapt GUI widgets to cam params
 	lirenaCaptureGUI_updateWidgets(appPtr);
-	//lirenaCaptureGUI_updateGPIWidgets(appPtr);
 
 	//start acquisition
 	lirenaCaptureGUI_startCaptureThread(appPtr);
@@ -600,80 +599,6 @@ gboolean lirenaCaptureGUI_updateWidgets(
 
 //-----------------------------------------------------------------------------
 // Everything below seems irrelevant for non-GUI mode
-
-
-//lirenaCaptureGUI_queryGPIlevels_updateWidgets
-gboolean lirenaCaptureGUI_queryGPIlevels_updateWidgets(LirenaCaptureApp *appPtr)
-{
-	lirenaCaptureGUI_queryGPIlevels(appPtr);
-
-	lirenaCaptureGUI_updateGPIWidgets(appPtr);
-
-	return TRUE;
-}
-
-
-
-gboolean lirenaCaptureGUI_queryGPIlevels(
-    LirenaCaptureApp* appPtr)
-{
-	// TODO adapt this to the cam mode we actually use, consult
-	// https://www.ximea.com/support/wiki/apis/xiapi_manual#XI_PRM_GPI_SELECTOR-or-gpi_selector
-
-	//int level = 0;
-
-	if (appPtr->streamerPtr->doAcquireFrames &&
-	    appPtr->streamerPtr->camParams.cameraHandle != INVALID_HANDLE_VALUE)
-	{
-		for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
-		{
-			// select current "logical input pin"
-			xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, 
-				XI_PRM_GPI_SELECTOR, 
-				//seems to start at 1? TODO investigate!
-				i+1);
-			
-			// get status of that "logical input pin".
-			// I don't get the meaning of this yet. 
-			// Logical Pin exists? 
-			// Pin is configured for controlling programmatically? <-- this is my best guess
-			// Kind of Signal that is required to "fire" (0, 1, falling, rising flank)?
-			xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, 
-				XI_PRM_GPI_LEVEL, 
-				& appPtr->streamerPtr->camParams.gpi_levels[i]);
-
-			gtk_toggle_button_set_active(
-				GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi_levels[i]), 
-				appPtr->streamerPtr->camParams.gpi_levels[i]);
-		}
-	}
-
-	return TRUE;
-}
-
-gboolean lirenaCaptureGUI_updateGPIWidgets(
-    LirenaCaptureApp* appPtr)
-{
-	if (appPtr->streamerPtr->doAcquireFrames &&
-	    appPtr->streamerPtr->camParams.cameraHandle != INVALID_HANDLE_VALUE)
-	{
-		for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
-		{
-			gtk_toggle_button_set_active(
-				GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi_levels[i]), 
-				appPtr->streamerPtr->camParams.gpi_levels[i]);
-		}
-
-	}
-
-	gtk_widget_set_sensitive(appPtr->uiPtr->widgets.boxx, appPtr->streamerPtr->doAcquireFrames);
-	gtk_widget_set_sensitive(appPtr->uiPtr->widgets.boxy, appPtr->streamerPtr->doAcquireFrames);
-	gtk_widget_set_sensitive(appPtr->uiPtr->widgets.exp,  appPtr->streamerPtr->doAcquireFrames);
-	gtk_widget_set_sensitive(appPtr->uiPtr->widgets.gain, appPtr->streamerPtr->doAcquireFrames);
-
-	return TRUE;
-}
-
 
 
 

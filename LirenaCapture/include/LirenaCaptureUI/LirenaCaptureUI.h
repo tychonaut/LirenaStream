@@ -237,13 +237,10 @@ gboolean lirenaCaptureGUI_openCam(
 
 gboolean lirenaCaptureGUI_setupCamParams(
     LirenaCaptureApp* appPtr);
-gboolean lirenaCaptureGUI_queryGPIlevels(
-    LirenaCaptureApp* app);
 
 gboolean lirenaCaptureGUI_updateWidgets(
     LirenaCaptureApp* appPtr);
-gboolean lirenaCaptureGUI_updateGPIWidgets(
-    LirenaCaptureApp* app);
+
 
 gboolean lirenaCaptureGUI_setupCallbacks(LirenaCaptureApp * appPtr);
 

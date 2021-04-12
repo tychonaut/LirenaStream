@@ -112,9 +112,21 @@ bool LirenaCaptureApp::run()
 //-----------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
+	//{ Rewritten code start --------------------------------------------------
+	//parse CLI
 	LirenaConfig* configPtr = new LirenaConfig(argc, argv);
+	
+	// init GUI and threading stuff ASAP, depending on config
 	LirenaCaptureUI::init(configPtr);
+
+	// In  LirenaCaptureApp constructor:
+	// - create LirenaStreamer instance (calls gst_init())
+	// 		--> create capture device instance (e.g. open ximea camera),
+    //			(but do not configure device yet)
+	// - create LirenaCaptureUI instance
+	//	 (but do not setup UI yet, i.e. do NOT create widgets, callbacks etc..)
 	LirenaCaptureApp *appPtr = new LirenaCaptureApp(configPtr);
+
 
 	bool success = appPtr->run();
 
@@ -123,63 +135,59 @@ int main(int argc, char **argv)
 
 	// exit 0 on success
 	return success ? 0 : 1;
-	
-	//-----------------------------------------------------------------------
+	//} Rewritten code end ----------------------------------------------------
+
+
+
+	//-------------------------------------------------------------------------
 	//old code:
 
-	//TODO find out if this threading- ui mess can be reordered/reduced...
-	if(appPtr->configPtr->doLocalDisplay)
-	{
-		#ifdef GDK_WINDOWING_X11
-		XInitThreads();
-		#endif
-
-		gdk_threads_init();
-
-		gdk_threads_enter();
-
-	  	gtk_init(&argc, &argv);
-	}
-
-
-	gst_init(&argc, &argv);
 
 	// have transformed until here ----	
 
 	if(appPtr->configPtr->doLocalDisplay)
 	{
-		bool success = true; 
+		// TODO distribute this functionality into appropriate: classes
+		// LirenaCaptureXimeaGUI, 
+		// LirenaCaptureStreamer,
+		// LirenaCaptureXimeaDevice 
+
+		gboolean success = TRUE; 
+		
 		success &= lirenaCaptureGUI_createWidgets(appPtr->uiPtr);
 
 		//success &= lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(appPtr);
 
-	// open cam
-	lirenaCaptureGUI_openCam(appPtr);
-	//init cam
-	lirenaCaptureGUI_setupCamParams(appPtr);
-	lirenaCaptureGUI_queryGPIlevels(appPtr);
-	// adapt GUI widgets to cam params
-	lirenaCaptureGUI_updateWidgets(appPtr);
-	lirenaCaptureGUI_updateGPIWidgets(appPtr);
+		// open cam
+		success &= lirenaCaptureGUI_openCam(appPtr);
+		//init cam
+		success &= lirenaCaptureGUI_setupCamParams(appPtr);
 
+		// adapt GUI widgets to cam params
+		success &= lirenaCaptureGUI_updateWidgets(appPtr);
 
-	//start acquisition
-	lirenaCaptureGUI_startCaptureThread(appPtr);
-
-
-
+		//start acquisition
+		success &= lirenaCaptureGUI_startCaptureThread(appPtr);
 
 
 		//show GUI windows
 		gtk_widget_show_all(appPtr->uiPtr->widgets.controlWindow);
+
 		//start the GUI main loop
 		gtk_main();
+
 		//exit program
 		gdk_threads_leave();
 	}
 	else
 	{
 		// No-GUI- start-up:
+
+		// TODO distribute this functionality into appropriate: classes
+		// LirenaCaptureUI, 
+		// LirenaCaptureStreamer,
+		// LirenaCaptureXimeaDevice 
+
 
 		//non-GUI-glib main loop for GStreamer
 		appPtr->uiPtr->setupUI();
