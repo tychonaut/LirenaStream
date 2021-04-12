@@ -82,11 +82,11 @@ struct LirenaXimeaCaptureWidgets :
         *labelcx, 
         *cx, 
         *labelcy, 
-        *cy, 
+        *cy;
 
         //*raw, 
         //*show, 
-        *run;
+        //*run;
 };
 
 
@@ -123,7 +123,7 @@ class LirenaCaptureUI
 
         // Setup network sockets or widgets
         //TODO make pure abstract and subclass
-        // replace lirenaCaptureDisplayController_setupWidgets
+        // replace lirenaCaptureGUI_createWidgets
         virtual bool setupUI();//{return true;}
 
         //replace lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets
@@ -216,7 +216,7 @@ struct LirenaXimeaStreamer_CameraParams;
 // function interface ----------------------------------------------------------
 
 //{ init GUI stuff 
-bool lirenaCaptureDisplayController_setupWidgets(
+bool lirenaCaptureGUI_createWidgets(
     LirenaCaptureUI *dispCtrl);
 // register callbacks   
 // (and do some awkward cam-init-stuff in timeouted callbacks
@@ -228,15 +228,22 @@ bool lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_in
 
 
 
-gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(
-    GtkToggleButton *run,  LirenaCaptureApp* app);
+gboolean lirenaCaptureGUI_initCam_startCaptureThread(
+    //GtkToggleButton *run,  
+    bool run,
+    LirenaCaptureApp* app);
 
-gboolean lirenaCaptureDisplayController_setupCamParams(
+gboolean lirenaCaptureGUI_setupCamParams_updateWidgets(
     //GtkToggleButton *raw, 
     bool raw,
     LirenaCaptureApp* appPtr);
 
+gboolean lirenaCaptureGUI_setupCamParams(
+    bool raw,
+    LirenaCaptureApp* appPtr);
 
+gboolean lirenaCaptureGUI_updateWidgets(
+    LirenaCaptureApp* appPtr);
 
 
 //-----------------------------------------------------------------------------

@@ -148,8 +148,12 @@ int main(int argc, char **argv)
 
 	if(appPtr->configPtr->doLocalDisplay)
 	{
-		bool success = lirenaCaptureDisplayController_setupWidgets(appPtr->uiPtr);
-		success &= lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(appPtr);		
+		bool success = true; 
+		success &= lirenaCaptureGUI_createWidgets(appPtr->uiPtr);
+
+		success &= lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(appPtr);
+		
+				
 		//show GUI windows
 		gtk_widget_show_all(appPtr->uiPtr->widgets.controlWindow);
 		//start the GUI main loop
