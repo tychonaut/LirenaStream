@@ -283,7 +283,7 @@ bool lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_in
 
 	//this callback has important functionality that is also required without GUI
 	//g_signal_connect(appPtr->uiPtr->widgets.run, "toggled",
-	//				 G_CALLBACK(lirenaCaptureGUI_initCam_startCaptureThread), (gpointer)appPtr); 
+	//				 G_CALLBACK(lirenaCaptureGUI_openCam_setupCam_updateGUI_startCaptureThread), (gpointer)appPtr); 
 
 
 
@@ -319,15 +319,9 @@ bool lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_in
 
 
 
-
-
-//lirenaCaptureGUI_initCam_startCaptureThread
-gboolean lirenaCaptureGUI_initCam_startCaptureThread(
-    //GtkToggleButton *run,  
-    bool run,
-	LirenaCaptureApp *appPtr)
+// open cam
+gboolean lirenaCaptureGUI_openCam(LirenaCaptureApp *appPtr)
 {
-	// open cam
 	if( appPtr->streamerPtr->camParams.cameraHandle == INVALID_HANDLE_VALUE)
 	{
 		DWORD nIndex = 0;
@@ -345,31 +339,40 @@ gboolean lirenaCaptureGUI_initCam_startCaptureThread(
 			return TRUE;
 		}
 	}
-
-	//init cam
-	lirenaCaptureGUI_setupCamParams_updateWidgets(
-		// GTK_TOGGLE_BUTTON(widgets->raw), 
-		true, // raw, as color shizzle is extremely slow
-		appPtr);
-
-
-
-
-
-	//{start capture thread
-	if (appPtr->streamerPtr->doAcquireFrames)
+	else
 	{
-		if (pthread_create(&appPtr->streamerPtr->captureThread,
-						   NULL, lirena_XimeaStreamer_captureThread_run, (void *)appPtr))
-		{
-			exit(1);
-		}
+		g_assert(0 && "lirenaCaptureGUI_openCam: cam already opened!");
+		return FALSE;
 	}
-	//}
+}
 
 
+gboolean lirenaCaptureGUI_startCaptureThread(
+	LirenaCaptureApp *appPtr)
+{
+	g_assert(appPtr->streamerPtr->doAcquireFrames &&
+		"capture thread must only be stardet if capturing is desired");
+	
+	int pthread_ret = pthread_create(
+						&appPtr->streamerPtr->captureThread,
+						NULL, 
+						lirena_XimeaStreamer_captureThread_run, 
+						(void *)appPtr);
+
+	if (pthread_ret != 0)
+	{
+		//triple fail redundancy ;(
+		g_assert(0 &&  "capture thread creation failed!");
+		exit(1);
+		return FALSE;
+	}
+	
 	return TRUE;
 }
+
+
+
+
 
 
 
@@ -492,20 +495,6 @@ gboolean lirenaCaptureGUI_updateWidgets(
 
  
 
-//lirenaCaptureGUI_setupCamParams_updateWidgets
-gboolean lirenaCaptureGUI_setupCamParams_updateWidgets(
-	// GtkToggleButton *raw, 
-	bool raw,
-	LirenaCaptureApp *appPtr)
-{
-
-	lirenaCaptureGUI_setupCamParams(raw, appPtr);
-
-	lirenaCaptureGUI_updateWidgets(appPtr);
-
-	return TRUE;
-}
-
 
 
 
@@ -563,11 +552,18 @@ gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(LirenaCaptureAp
 
 gboolean lirenaCaptureDisplayController_startHack_cb(LirenaCaptureApp *appPtr)
 {
+
+	// open cam
+	lirenaCaptureGUI_openCam(appPtr);
+
+	//init cam
+	lirenaCaptureGUI_setupCamParams(true, appPtr);
+
+	// adapt GUI widgets to cam params
+	lirenaCaptureGUI_updateWidgets(appPtr);
+
 	//start acquisition
-	lirenaCaptureGUI_initCam_startCaptureThread(
-		//GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.run),
-		true,
-		appPtr); 
+	lirenaCaptureGUI_startCaptureThread(appPtr);
 
 	return FALSE;
 }

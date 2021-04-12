@@ -218,6 +218,7 @@ struct LirenaXimeaStreamer_CameraParams;
 //{ init GUI stuff 
 bool lirenaCaptureGUI_createWidgets(
     LirenaCaptureUI *dispCtrl);
+
 // register callbacks   
 // (and do some awkward cam-init-stuff in timeouted callbacks
 //   that does NOT belong there...)
@@ -228,15 +229,10 @@ bool lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_in
 
 
 
-gboolean lirenaCaptureGUI_initCam_startCaptureThread(
-    //GtkToggleButton *run,  
-    bool run,
-    LirenaCaptureApp* app);
 
-gboolean lirenaCaptureGUI_setupCamParams_updateWidgets(
-    //GtkToggleButton *raw, 
-    bool raw,
-    LirenaCaptureApp* appPtr);
+gboolean lirenaCaptureGUI_openCam(
+    LirenaCaptureApp *appPtr);
+
 
 gboolean lirenaCaptureGUI_setupCamParams(
     bool raw,
@@ -244,6 +240,9 @@ gboolean lirenaCaptureGUI_setupCamParams(
 
 gboolean lirenaCaptureGUI_updateWidgets(
     LirenaCaptureApp* appPtr);
+
+gboolean lirenaCaptureGUI_startCaptureThread(
+	LirenaCaptureApp *appPtr);
 
 
 //-----------------------------------------------------------------------------
