@@ -188,10 +188,24 @@ bool lirenaCaptureGUI_createWidgets(LirenaCaptureUI *dispCtrl)
 	dispCtrl->widgets.labelcx = gtk_label_new("cx");
 	dispCtrl->widgets.labely0 = gtk_label_new("y0");
 	dispCtrl->widgets.labelcy = gtk_label_new("cy");
-	dispCtrl->widgets.gpi1 = gtk_check_button_new_with_label("GPI1");
-	dispCtrl->widgets.gpi2 = gtk_check_button_new_with_label("GPI2");
-	dispCtrl->widgets.gpi3 = gtk_check_button_new_with_label("GPI3");
-	dispCtrl->widgets.gpi4 = gtk_check_button_new_with_label("GPI4");
+
+	for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
+	{
+		const int maxSize=256;
+		gchar label[maxSize];
+		//std::string()
+		g_snprintf(label,
+			   (gulong)maxSize,
+			   "%s%i", "GPI", i);
+
+		dispCtrl->widgets.gpi_levels[i] =
+			gtk_check_button_new_with_label(label);
+	}
+	// dispCtrl->widgets.gpi1 = gtk_check_button_new_with_label("GPI1");
+	// dispCtrl->widgets.gpi2 = gtk_check_button_new_with_label("GPI2");
+	// dispCtrl->widgets.gpi3 = gtk_check_button_new_with_label("GPI3");
+	// dispCtrl->widgets.gpi4 = gtk_check_button_new_with_label("GPI4");
+
 	dispCtrl->widgets.exp = gtk_hscale_new_with_range(1, 1000, 1);
 	dispCtrl->widgets.gain = gtk_hscale_new_with_range(0, 1, 0.1);	 //use dummy limits
 	dispCtrl->widgets.x0 = gtk_spin_button_new_with_range(0, 128, 2); //use dummy max limit
@@ -219,10 +233,21 @@ bool lirenaCaptureGUI_createWidgets(LirenaCaptureUI *dispCtrl)
 	gtk_widget_set_sensitive(dispCtrl->widgets.exp, FALSE);
 	gtk_widget_set_sensitive(dispCtrl->widgets.gain, FALSE);
 	//pack everything into window
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxgpi), dispCtrl->widgets.gpi1);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxgpi), dispCtrl->widgets.gpi2);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxgpi), dispCtrl->widgets.gpi3);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxgpi), dispCtrl->widgets.gpi4);
+
+	for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
+	{
+		gtk_container_add(
+			GTK_CONTAINER(dispCtrl->widgets.boxgpi), 
+			dispCtrl->widgets.gpi_levels[i]);
+	}
+
+	// gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxgpi), dispCtrl->widgets.gpi1);
+	// gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxgpi), dispCtrl->widgets.gpi2);
+	// gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxgpi), dispCtrl->widgets.gpi3);
+	// gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxgpi), dispCtrl->widgets.gpi4);
+
+
+
 	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.boxgpi);
 	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxx), dispCtrl->widgets.labelx0);
 	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxx), dispCtrl->widgets.x0);
@@ -329,15 +354,19 @@ gboolean lirenaCaptureGUI_openCam(LirenaCaptureApp *appPtr)
 		if (env)
 		{
 			nIndex = atoi(env);
+		
 		}
 		DWORD tmp;
 		xiGetNumberDevices(&tmp); //rescan available devices
+
 		if (xiOpenDevice(nIndex, &appPtr->streamerPtr->camParams.cameraHandle) != XI_OK)
 		{
 			printf("Couldn't setup camera!\n");
 			appPtr->streamerPtr->doAcquireFrames = FALSE;
-			return TRUE;
+			return FALSE;
 		}
+
+		return TRUE;
 	}
 	else
 	{
@@ -502,26 +531,49 @@ gboolean lirenaCaptureGUI_updateWidgets(
 // Everything below seems irrelevant for non-GUI mode
 
 
-
+//lirenaCaptureDisplayController_initCamButtonSensitivity
 gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(LirenaCaptureApp *appPtr)
 {
-	int level = 0;
+	// TODO adapt this to the cam mode we actually use, consult
+	// https://www.ximea.com/support/wiki/apis/xiapi_manual#XI_PRM_GPI_SELECTOR-or-gpi_selector
+
+	//int level = 0;
 
 	if (appPtr->streamerPtr->doAcquireFrames &&
 	    appPtr->streamerPtr->camParams.cameraHandle != INVALID_HANDLE_VALUE)
 	{
-		xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 1);
-		xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi1), level);
-		xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 2);
-		xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi2), level);
-		xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 3);
-		xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi3), level);
-		xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 4);
-		xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi4), level);
+		for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
+		{
+			// select current "logical input pin"
+			xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, 
+				XI_PRM_GPI_SELECTOR, 
+				//seems to start at 1? TODO investigate!
+				i+1);
+			
+			// get status of that "logical input pin".
+			// I don't get the meaning of this yet. 
+			// Logical Pin exists? 
+			// Pin is configured for controlling programmatically? <-- this is my best guess
+			// Kind of Signal that is required to "fire" (0, 1, falling, rising flank)?
+			xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, 
+				XI_PRM_GPI_LEVEL, 
+				& appPtr->streamerPtr->camParams.gpi_levels[i]);
+
+			gtk_toggle_button_set_active(
+				GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi_levels[i]), 
+				appPtr->streamerPtr->camParams.gpi_levels[i]);
+		}
+
+		// xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 2);
+		// xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
+		// gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi2), level);
+		// xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 3);
+		// xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
+		// gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi3), level);
+		// xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 4);
+		// xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
+		// gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi4), level);
+
 	}
 
 	// gtk_toggle_button_set_inconsistent(

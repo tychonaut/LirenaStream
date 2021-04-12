@@ -65,10 +65,11 @@ struct LirenaXimeaCaptureWidgets :
         *boxx, 
         *boxy, 
 
-        *gpi1, 
-        *gpi2, 
-        *gpi3, 
-        *gpi4, 
+        *gpi_levels[LIRENA_XIMEA_MAX_GPI_SELECTORS],
+        // *gpi1, 
+        // *gpi2, 
+        // *gpi3, 
+        // *gpi4, 
 
         *labelexp, 
         *exp, 

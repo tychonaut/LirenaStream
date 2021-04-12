@@ -8,6 +8,15 @@
 #include <argp.h> // CLI arguments parsing
 
 
+// https://www.ximea.com/support/wiki/apis/xiapi_manual#XI_PRM_GPI_SELECTOR-or-gpi_selector
+// Some kind of general purpose input state:
+// don't really get it yet, was 0 for GPI selector 1-4 on test cam, threw error on
+// selector 4, hinting at "0-3". Awkward, useless so far, but keep in mind that
+// with new cam and active synchronized triggering, this may become very important!
+#define LIRENA_XIMEA_MAX_GPI_SELECTORS 4
+
+
+
 // LirenaCaptureDeviceType has te be defined before 
 // LirenaConfig if not wanting to use ugly typedefs to int
 enum LirenaCaptureDeviceType
