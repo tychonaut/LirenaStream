@@ -171,17 +171,9 @@ int main(int argc, char **argv)
 		success &= lirenaStreamer_startCaptureThread(appPtr);
 
 
-		//show GUI windows
-		gtk_widget_show_all(appPtr->uiPtr->widgets.controlWindow);
-		//TODO find out if nececcary, and if yes in what order wrt. gtk_widget_show_all
-		//gtk_widget_realize(appPtr->uiPtr->widgets.controlWindow);
+		//lirenaCaptureXimeaGUI_enterMainLoop(appPtr->uiPtr);
 
 
-		//start the GUI main loop
-		gtk_main();
-
-		//exit program ...
-		gdk_threads_leave();
 	}
 	else
 	{

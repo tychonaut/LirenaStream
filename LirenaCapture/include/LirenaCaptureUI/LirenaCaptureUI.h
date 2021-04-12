@@ -246,29 +246,38 @@ gboolean lirenaStreamer_startCaptureThread(
 //-----------------------------------------------------------------------------
 // Everything below seems irrelevant for non-GUI mode
 
+//LirenaCaptureXimeaGUI_updateGain
 gboolean close_cb(GtkWidget*, GdkEvent*,  
 	LirenaStreamer* streamerPtr);
 
 
 //following only widget-to-cam-param stuff ------------------------------------
-//gboolean update_show(GtkToggleButton *show,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_gain(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_exposure(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_cy(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_cx(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_y0(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_x0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams* cam);
-
-
-
+//LirenaCaptureXimeaGUI_cb_updateGain
+gboolean update_gain(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); 
+//LirenaCaptureXimeaGUI_cb_update
+gboolean update_exposure(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); 
+//LirenaCaptureXimeaGUI_cb_update
+gboolean update_cy(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam);
+//LirenaCaptureXimeaGUI_cb_update
+gboolean update_cx(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam);
+//LirenaCaptureXimeaGUI_cb_update
+gboolean update_y0(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); 
+//LirenaCaptureXimeaGUI_cb_update
+gboolean update_x0(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam);
 
 
 //{ stuff to bind GStreamer renderings to an X/GDK/GTK window
 //  via videooverlay
-GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message, 
-    LirenaCaptureUI* displayCtrl);  //LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+//LirenaCaptureXimeaGUI_cb_handleBusSyncEvent
+GstBusSyncReply bus_sync_handler(
+    GstBus* bus,
+     GstMessage* message, 
+    LirenaCaptureUI* displayCtrl);  //LirenaXimeaStreamer_CameraParams* cam); 
 
-void video_widget_realize_cb(GtkWidget *widget, 
+//LirenaCaptureXimeaGUI_cb_grabXhandleForVidWindow
+// called upon realization of video window
+void video_widget_realize_cb(
+    GtkWidget *widget, 
 	LirenaCaptureUI* displayCtrl);
 //}
 
