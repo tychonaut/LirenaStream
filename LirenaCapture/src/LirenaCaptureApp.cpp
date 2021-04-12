@@ -153,30 +153,34 @@ int main(int argc, char **argv)
 		// LirenaCaptureXimeaDevice 
 
 		gboolean success = TRUE; 
-		
-		success &= lirenaCaptureGUI_createWidgets(appPtr->uiPtr);
 
-		//success &= lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(appPtr);
 
 		// open cam
-		success &= lirenaCaptureGUI_openCam(appPtr);
+		success &= lirenaXimeaCaptureDevice_openCam(appPtr);
 		//init cam
-		success &= lirenaCaptureGUI_setupCamParams(appPtr);
+		success &= lirenaXimeaCaptureDevice_setupCamParams(appPtr);
 
+		// Create GUI
+		success &= lirenaCaptureXimeaGUI_createWidgets(appPtr->uiPtr);
 		// adapt GUI widgets to cam params
-		success &= lirenaCaptureGUI_updateWidgets(appPtr);
+		//lirenaCaptureXimeaGUI_updateWidgets
+		success &= lirenaCaptureXimeaGUI_updateWidgets(appPtr);
 
 		//start acquisition
-		success &= lirenaCaptureGUI_startCaptureThread(appPtr);
+		//lirenaStreamer_startCaptureThread
+		success &= lirenaStreamer_startCaptureThread(appPtr);
 
 
 		//show GUI windows
 		gtk_widget_show_all(appPtr->uiPtr->widgets.controlWindow);
+		//TODO find out if nececcary, and if yes in what order wrt. gtk_widget_show_all
+		//gtk_widget_realize(appPtr->uiPtr->widgets.controlWindow);
+
 
 		//start the GUI main loop
 		gtk_main();
 
-		//exit program
+		//exit program ...
 		gdk_threads_leave();
 	}
 	else
@@ -249,7 +253,7 @@ int main(int argc, char **argv)
 	}	
 
 
-	//exit program
+	//exit program:
 
 	appPtr->streamerPtr->doAcquireFrames = FALSE;
 	

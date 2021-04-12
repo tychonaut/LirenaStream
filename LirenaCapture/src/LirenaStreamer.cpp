@@ -518,6 +518,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 						appPtr->streamerPtr);
 
 		gtk_widget_show_all(appPtr->uiPtr->widgets.videoWindow);
+		//TODO find out if nececcary, and if yes in what order wrt. gtk_widget_show_all
 		gtk_widget_realize(appPtr->uiPtr->widgets.videoWindow);
 
 		appPtr->uiPtr->widgets.screen = gdk_screen_get_default();

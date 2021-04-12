@@ -124,7 +124,7 @@ class LirenaCaptureUI
 
         // Setup network sockets or widgets
         //TODO make pure abstract and subclass
-        // replace lirenaCaptureGUI_createWidgets
+        // replace lirenaCaptureXimeaGUI_createWidgets
         virtual bool setupUI();//{return true;}
 
         //replace lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets
@@ -217,35 +217,26 @@ struct LirenaXimeaStreamer_CameraParams;
 // function interface ----------------------------------------------------------
 
 //{ init GUI stuff 
-gboolean lirenaCaptureGUI_createWidgets(
+gboolean lirenaCaptureXimeaGUI_createWidgets(
     LirenaCaptureUI *dispCtrl);
 
-// register callbacks   
-// (and do some awkward cam-init-stuff in timeouted callbacks
-//   that does NOT belong there...)
-gboolean lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(
-    LirenaCaptureApp * appPtr);
-//}
 
 
-
-
-
-gboolean lirenaCaptureGUI_openCam(
+gboolean lirenaXimeaCaptureDevice_openCam(
     LirenaCaptureApp *appPtr);
 
 
-gboolean lirenaCaptureGUI_setupCamParams(
+gboolean lirenaXimeaCaptureDevice_setupCamParams(
     LirenaCaptureApp* appPtr);
 
-gboolean lirenaCaptureGUI_updateWidgets(
+gboolean lirenaCaptureXimeaGUI_updateWidgets(
     LirenaCaptureApp* appPtr);
 
 
 gboolean lirenaCaptureGUI_setupCallbacks(LirenaCaptureApp * appPtr);
 
 
-gboolean lirenaCaptureGUI_startCaptureThread(
+gboolean lirenaStreamer_startCaptureThread(
 	LirenaCaptureApp *appPtr);
 
 
@@ -280,22 +271,6 @@ GstBusSyncReply bus_sync_handler(GstBus* bus, GstMessage* message,
 void video_widget_realize_cb(GtkWidget *widget, 
 	LirenaCaptureUI* displayCtrl);
 //}
-
-
-// button sensitivity callback: irrelevant for non-GUI mode
-gboolean lirenaCaptureGUI_quieryGPIlevels_updateWidgets(
-    LirenaCaptureApp* app);
-
-
-
-// some kind of hack to force ANOTHER callback to be called early...
-// ... don't understand the details (MS)
-// is irrelevant for non-GUI mode
-gboolean lirenaCaptureGUI_WEIRDcb__opCam_setupCamPrms_updWidgs_startCapThrd(
-    LirenaCaptureApp* appPtr);
-
-
-
 
 
 

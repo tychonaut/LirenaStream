@@ -173,8 +173,8 @@ bool LirenaCaptureXimeaGUI::shutdownUI()
 
 //-----------------------------------------------------------------------------
 
-//lirenaCaptureGUI_createWidgets
-gboolean lirenaCaptureGUI_createWidgets(LirenaCaptureUI *dispCtrl)
+//lirenaCaptureXimeaGUI_createWidgets
+gboolean lirenaCaptureXimeaGUI_createWidgets(LirenaCaptureUI *dispCtrl)
 {
 	//create widgets
 	dispCtrl->widgets.controlWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -328,62 +328,10 @@ gboolean lirenaCaptureGUI_setupCallbacks(LirenaCaptureApp *appPtr)
 	return TRUE;
 }
 
-gboolean lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(
-	LirenaCaptureApp * appPtr)
-{
-    //register handlers
-
-
-	// // some kind of hack to force ANOTHER callback to be called early:
-	// // init the cam and  start the captureThread! 
-	// // instead of calling this functionality directly...
-	// // 
-	// // cb is irrelevant for non-GUI mode.
-	// // ximea dev's comment :
-	// // "only way I found to make sure window is displayed right away"
-	// gdk_threads_add_timeout(100, 
-	// 	(GSourceFunc)lirenaCaptureGUI_WEIRDcb__opCam_setupCamPrms_updWidgs_startCapThrd, 
-	// 	(gpointer)appPtr); 
-
-	// // button sensitivity callback: irrelevant for non-GUI mode
-	// // another hack of the above kind: 
-	// // instead of calling the functions directly on program start,
-	// //  there is some messing around with timeouts and callbacks
-	// // and of course the camera itself  0o.
-	// // TODO detangle this stuff!!
-	// gdk_threads_add_timeout(1000, 
-    //     (GSourceFunc)lirenaCaptureGUI_queryGPIlevels_updateWidgets,
-    //     (gpointer)appPtr);
-
-
-	// above awkward timeout funcs expands to direct calls:
-
-
-	// open cam
-	lirenaCaptureGUI_openCam(appPtr);
-
-	//init cam
-	lirenaCaptureGUI_setupCamParams(appPtr);
-	//lirenaCaptureGUI_queryGPIlevels(appPtr);
-
-
-	// adapt GUI widgets to cam params
-	lirenaCaptureGUI_updateWidgets(appPtr);
-
-	//start acquisition
-	lirenaCaptureGUI_startCaptureThread(appPtr);
-
-	// "actual callbacks" only begin here: --------------------------
-	lirenaCaptureGUI_setupCallbacks(appPtr);
-
-
-    return TRUE;
-}
-
 
 
 // open cam
-gboolean lirenaCaptureGUI_openCam(LirenaCaptureApp *appPtr)
+gboolean lirenaXimeaCaptureDevice_openCam(LirenaCaptureApp *appPtr)
 {
 	if( appPtr->streamerPtr->camParams.cameraHandle == INVALID_HANDLE_VALUE)
 	{
@@ -408,13 +356,13 @@ gboolean lirenaCaptureGUI_openCam(LirenaCaptureApp *appPtr)
 	}
 	else
 	{
-		g_assert(0 && "lirenaCaptureGUI_openCam: cam already opened!");
+		g_assert(0 && "lirenaXimeaCaptureDevice_openCam: cam already opened!");
 		return FALSE;
 	}
 }
 
 
-gboolean lirenaCaptureGUI_startCaptureThread(
+gboolean lirenaStreamer_startCaptureThread(
 	LirenaCaptureApp *appPtr)
 {
 	g_assert(appPtr->streamerPtr->doAcquireFrames &&
@@ -443,7 +391,7 @@ gboolean lirenaCaptureGUI_startCaptureThread(
 
 
 
-gboolean lirenaCaptureGUI_setupCamParams(
+gboolean lirenaXimeaCaptureDevice_setupCamParams(
     LirenaCaptureApp* appPtr)
 {
 	// relict of oold code: we now only take raw stuff,
@@ -531,7 +479,7 @@ gboolean lirenaCaptureGUI_setupCamParams(
 }
 
 
-gboolean lirenaCaptureGUI_updateWidgets(
+gboolean lirenaCaptureXimeaGUI_updateWidgets(
     LirenaCaptureApp* appPtr)
 {
 	LirenaXimeaStreamer_CameraParams * camParamsPtr = 
@@ -603,28 +551,6 @@ gboolean lirenaCaptureGUI_updateWidgets(
 
 
 
-
-
-
-
-//lirenaCaptureGUI_WEIRDcb__opCam_setupCamPrms_updWidgs_startCapThrd
-gboolean lirenaCaptureGUI_WEIRDcb__opCam_setupCamPrms_updWidgs_startCapThrd(LirenaCaptureApp *appPtr)
-{
-
-	// open cam
-	lirenaCaptureGUI_openCam(appPtr);
-
-	//init cam
-	lirenaCaptureGUI_setupCamParams(appPtr);
-
-	// adapt GUI widgets to cam params
-	lirenaCaptureGUI_updateWidgets(appPtr);
-
-	//start acquisition
-	lirenaCaptureGUI_startCaptureThread(appPtr);
-
-	return FALSE;
-}
 
 
 
