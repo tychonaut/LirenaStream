@@ -71,10 +71,34 @@ bool LirenaStreamer::setupGStreamerPipeline()
 	return false;
 }
 
-bool LirenaStreamer::launchCaptureThread()
+bool LirenaStreamer::launchCaptureThread(
+	LirenaCaptureApp * appPtr_refactor_compat_TODO_delete
+)
 {
-	g_assert(0&& "TODO implement");
-	return false;
+	//Adapted from C-style function:
+	//	gboolean lirenaStreamer_startCaptureThread(
+	//		LirenaCaptureApp *appPtr);
+
+	g_assert(this->doAcquireFrames &&
+		     "capture thread may only be started"
+			 " if capturing is desired");
+	
+	int pthread_ret = pthread_create(
+						& this->captureThread,
+						NULL, 
+						lirena_XimeaStreamer_captureThread_run, 
+						(void *)appPtr_refactor_compat_TODO_delete);
+	
+	if (pthread_ret != 0)
+	{
+		//triple fail redundancy ;(
+		g_assert(0 &&  "capture thread creation failed!");
+		exit(1);
+		return false;
+	}
+	
+
+	return true;
 }
 
 bool LirenaStreamer::terminateCaptureThread()
@@ -283,13 +307,14 @@ gchar* constructGstreamerPipelineString(LirenaConfig const * config)
 		}
 	} else	
 	{
-		// just a plain old videoconvert for now
-			//software demosaic in gstreamer:
-			g_snprintf(gstreamerPreProcessingString,
-				(gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
-			    "   video/x-raw! "
-			    " videoconvert ! "
-			);
+		// MagewellEco or videotestsrc:
+		//just a plain old videoconvert for now
+		//software demosaic in gstreamer:
+		g_snprintf(gstreamerPreProcessingString,
+			(gulong)LIRENA_MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH,
+		    "   video/x-raw! "
+		    " videoconvert ! "
+		);
 	}
 
 
@@ -377,20 +402,21 @@ gchar* constructGstreamerPipelineString(LirenaConfig const * config)
     */
 	g_snprintf(gstreamerPipelineString,
 			   (gulong) LIRENA_MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
-			   // Mpeg2TS muxer:
-			   //" mpegtsmux name=mp2ts_muxer alignment=0 "
-			   //""
-			   // KLV appsrc to  muxer:
+			   
+			   // KLV appsrc
 			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=klvSrc ! "
 			   "   meta/x-klv, parsed=true ! "
-			   " mpegtsmux name=mp2ts_muxer alignment=0 " //TODO check: maybe alignment 7 for UDP!? as gstinspect says!
-			   //"  mpegtsmux."
+			   // Mpeg2TS muxer:
+			   // TODO check: maybe alignment 7 for UDP!? as gstinspect says!
+			   " mpegtsmux name=mp2ts_muxer alignment=0 " 
 			   ""
+
+
 			   // Video appsrc, encode h264, to muxer:
 			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=captureAppSrc ! "
 			   ""
 			   //{ 
-			   // Preprcessing: either of:
+			   // Preprocessing: either of:
 			   // 1.  gstreamer software-debayering (ximea stuff that worked before returning the test cam), 
 			   // 2.  special filter caps for non-gstreamer cuda-debayered cuda-memory
 			   //       and then xvvidconv or so instead of videoconvert ... TODO as soon as cams are here!
@@ -403,6 +429,8 @@ gchar* constructGstreamerPipelineString(LirenaConfig const * config)
 			   " nvvidconv ! "
 			   " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
 			   " h264parse  disable-passthrough=true ! " //config-interval=-1  <--may be required in TCP?...
+			   ""
+			   
 			   " mp2ts_muxer. "
 			   ""
 			   // prepare muxed stream for network transmission:

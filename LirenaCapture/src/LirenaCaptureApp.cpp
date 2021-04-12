@@ -85,7 +85,7 @@ bool LirenaCaptureApp::run()
 
 	// start acquiring and "publishing" via gstreamer
 	// in separate thread
-	success &= streamerPtr->launchCaptureThread();
+	success &= streamerPtr->launchCaptureThread(this);
 	g_assert(success);
 
 	// make this (main) thread the (G)UI thread:

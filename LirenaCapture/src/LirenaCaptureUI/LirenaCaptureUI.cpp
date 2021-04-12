@@ -166,7 +166,6 @@ bool LirenaCaptureXimeaGUI::setupCallbacks()
 		gtk_range_get_adjustment(
 			GTK_RANGE(widgets.exp)),
 		"value_changed",
-
 		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateExposure),
 		&streamerPtr->camParams);
 
@@ -236,9 +235,8 @@ bool LirenaCaptureXimeaGUI::setupCallbacks()
 	//n.b. probably exiting program  after return from main loop
  }
 
-  bool LirenaCaptureXimeaGUI::exitMainLoop()
+ bool LirenaCaptureXimeaGUI::exitMainLoop()
  {
-
 	gdk_threads_enter();
 
 	// don't bother with window destruction, just shut down GTK
@@ -258,6 +256,7 @@ bool LirenaCaptureXimeaGUI::shutdownUI()
 	// calling gtk_main_quit() more than once seems no problem:
 	// https://book.huihoo.com/gtk+-gnome-application-development/sec-mainloop.html
 	exitMainLoop();
+
 	return true;
 }
 

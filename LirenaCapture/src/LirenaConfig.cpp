@@ -22,12 +22,20 @@ static char args_doc[] = "IP Port";
 static struct argp_option options[] = 
 {
   {"captureDeviceType",  'd', "TYPE",    0, 
-    "Ximea (camera, default), MagewellEco (capture card)" }, //OPTION_ARG_OPTIONAL
+    "TYPE can be either of: "
+    "'Ximea' (camera, default), "
+    "'MagewellEco' (capture card), "
+    "'videotestsrc' (GStreamer internal test video signal, "
+                   "no physical device required)"  
+  }, //OPTION_ARG_OPTIONAL
+
+  {"noKLV",  'n', 0,         0, 
+    "For debugging: Do NOT inject KLV meta data into frames (KLV injection is enabled per default)" },
 
   {"localdisplay",  'l', 0,         0, 
-    "For debugging :display video locally, (not just stream per UDP)" },
+    "For debugging: display video locally, (not just stream per UDP)" },
   {"localGUI",      'g', 0,         0, 
-    "For debugging :show GUI to control params (not yet supported for each device)" },
+    "For debugging: show GUI to control params (not yet supported for each device)" },
   
   {"output",        'o', "FILE",    0, 
     "For debugging: Dump encoded stream to disk" }, //OPTION_ARG_OPTIONAL
@@ -86,7 +94,11 @@ parse_opt (int key, char *arg, struct argp_state *state)
     //  keys to parse: dlgofxytec
 
     case 'd':
-      if( strcmp(arg, "Ximea") == 0 )
+      if( strcmp(arg, "videotestsrc") == 0 )
+      {
+        myArgs->captureDeviceType = LIRENA_CAPTURE_DEVICE_TYPE_videotestsrc;
+      }
+      else if( strcmp(arg, "Ximea") == 0 )
       {
         myArgs->captureDeviceType = LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera;
       }
@@ -99,6 +111,10 @@ parse_opt (int key, char *arg, struct argp_state *state)
         printf("ERROR: unknown capture device type: %s ", arg);
         argp_usage (state);
       }
+      break;
+
+    case 'n':
+      myArgs->injectKLVmeta = false;
       break;
 
     case 'l':
@@ -165,6 +181,8 @@ LirenaConfig::LirenaConfig(int argc, char **argv)
 
     this->captureDeviceType = LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera;
 
+    this->injectKLVmeta = true;
+
     this->IP = "192.168.0.169";
     this->port = "5001";
 
@@ -200,6 +218,7 @@ LirenaConfig::LirenaConfig(int argc, char **argv)
     printf ("IP = %s\n"
             "Port = %s\n"
             "Capture device type: %s\n"
+            "Inject KLV meta data into each video frame: %s\n"
             "Target FPS = %i\n"
             "Target Resolution = (%i) x (%i)\n"
             "display locally = %s\n"
@@ -216,9 +235,14 @@ LirenaConfig::LirenaConfig(int argc, char **argv)
               "Ximea (camera)" 
               :
               this->captureDeviceType == LIRENA_CAPTURE_DEVICE_TYPE_MagewellEcoCapture ?
-              "MagewellEco (capture card)" 
-              : "unsupported device type (internal error!)"
-              ,
+                "MagewellEco (capture card)" 
+                : 
+                this->captureDeviceType == LIRENA_CAPTURE_DEVICE_TYPE_videotestsrc ?
+                  "videotestsrc (GStreamer-internal test video signal)"
+                  : "unsupported device type (internal error!)"
+            ,
+
+            this->injectKLVmeta ? "yes" : "no",
 
             this->targetFPS,
             this->targetResolutionX, this->targetResolutionY,

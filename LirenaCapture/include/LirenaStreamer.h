@@ -31,8 +31,9 @@
 
 
 
-
-//struct LirenaCaptureApp;
+// during refactoring for compatibility reasons;
+// TODO delete
+class LirenaCaptureApp;
 
 
 
@@ -180,7 +181,9 @@ class LirenaStreamer
 
 		bool setupGStreamerPipeline();
 
-		bool launchCaptureThread();
+		bool launchCaptureThread(
+			LirenaCaptureApp * appPtr_refactor_compat_TODO_delete
+		);
 		bool terminateCaptureThread();
 
 

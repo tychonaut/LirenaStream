@@ -55,6 +55,11 @@ class LirenaConfig
   // default: XimeaCamera
   LirenaCaptureDeviceType captureDeviceType;
 
+  // add KLV meta data to each H264 encoded video frame
+  // via GStreamer muxing into MP2TS container format
+  // default: true
+  bool injectKLVmeta;
+
   // Resolution params may be ignored depending 
   // on device type and capturing mode
   // default: -1, meaning automatic
