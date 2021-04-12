@@ -246,37 +246,41 @@ gboolean lirenaStreamer_startCaptureThread(
 //-----------------------------------------------------------------------------
 // Everything below seems irrelevant for non-GUI mode
 
-//LirenaCaptureXimeaGUI_updateGain
-gboolean close_cb(GtkWidget*, GdkEvent*,  
+//lirenaCaptureXimeaGUI_cb_closeWindow
+gboolean LirenaCaptureXimeaGUI_cb_closeWindow(GtkWidget*, GdkEvent*,  
 	LirenaStreamer* streamerPtr);
 
-
 //following only widget-to-cam-param stuff ------------------------------------
-//LirenaCaptureXimeaGUI_cb_updateGain
-gboolean update_gain(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); 
-//LirenaCaptureXimeaGUI_cb_update
-gboolean update_exposure(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); 
-//LirenaCaptureXimeaGUI_cb_update
-gboolean update_cy(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam);
-//LirenaCaptureXimeaGUI_cb_update
-gboolean update_cx(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam);
-//LirenaCaptureXimeaGUI_cb_update
-gboolean update_y0(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); 
-//LirenaCaptureXimeaGUI_cb_update
-gboolean update_x0(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam);
-
+//lirenaCaptureXimeaGUI_cb_updateGain
+gboolean lirenaCaptureXimeaGUI_cb_updateGain(GtkAdjustment *adj,
+                                             LirenaXimeaStreamer_CameraParams *cam);
+//lirenaCaptureXimeaGUI_cb_updateExposure
+gboolean lirenaCaptureXimeaGUI_cb_updateExposure(GtkAdjustment *adj,
+                                                 LirenaXimeaStreamer_CameraParams *cam);
+//lirenaCaptureXimeaGUI_cb_updateCy
+gboolean lirenaCaptureXimeaGUI_cb_updateCy(GtkAdjustment *adj,
+                                           LirenaXimeaStreamer_CameraParams *cam);
+//lirenaCaptureXimeaGUI_cb_updateCx
+gboolean lirenaCaptureXimeaGUI_cb_updateCx(GtkAdjustment *adj,
+                                           LirenaXimeaStreamer_CameraParams *cam);
+//lirenaCaptureXimeaGUI_cb_updateY0
+gboolean lirenaCaptureXimeaGUI_cb_updateY0(GtkAdjustment *adj,
+                                           LirenaXimeaStreamer_CameraParams *cam);
+//lirenaCaptureXimeaGUI_cb_updateX0
+gboolean lirenaCaptureXimeaGUI_cb_updateX0(GtkAdjustment *adj,
+                                           LirenaXimeaStreamer_CameraParams *cam);
 
 //{ stuff to bind GStreamer renderings to an X/GDK/GTK window
 //  via videooverlay
-//LirenaCaptureXimeaGUI_cb_handleBusSyncEvent
-GstBusSyncReply bus_sync_handler(
+//lirenaCaptureXimeaGUI_cb_handleBusSyncEvent
+GstBusSyncReply lirenaCaptureXimeaGUI_cb_handleBusSyncEvent(
     GstBus* bus,
      GstMessage* message, 
     LirenaCaptureUI* displayCtrl);  //LirenaXimeaStreamer_CameraParams* cam); 
 
-//LirenaCaptureXimeaGUI_cb_grabXhandleForVidWindow
+//lirenaCaptureXimeaGUI_cb_grabXhandleForVidWindow
 // called upon realization of video window
-void video_widget_realize_cb(
+void lirenaCaptureXimeaGUI_cb_grabXhandleForVidWindow(
     GtkWidget *widget, 
 	LirenaCaptureUI* displayCtrl);
 //}

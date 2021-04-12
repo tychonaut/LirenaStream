@@ -159,7 +159,7 @@ bool LirenaCaptureXimeaGUI::setupCallbacks()
 		gtk_range_get_adjustment(
 			GTK_RANGE(widgets.gain)),
 		"value_changed",
-		G_CALLBACK(update_gain),
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateGain),
 		&streamerPtr->camParams);
 
 	g_signal_connect(
@@ -167,41 +167,41 @@ bool LirenaCaptureXimeaGUI::setupCallbacks()
 			GTK_RANGE(widgets.exp)),
 		"value_changed",
 
-		G_CALLBACK(update_exposure),
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateExposure),
 		&streamerPtr->camParams);
 
 	g_signal_connect(
 		gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(widgets.x0)),
 		"value_changed",
-		G_CALLBACK(update_x0),
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateX0),
 		&streamerPtr->camParams);
 
 	g_signal_connect(
 		gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(widgets.y0)),
 		"value_changed",
-		G_CALLBACK(update_y0),
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateY0),
 		&streamerPtr->camParams);
 
 	g_signal_connect(
 		gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(widgets.cx)),
 		"value_changed", 
-		G_CALLBACK(update_cx), 
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateCx), 
 		&streamerPtr->camParams);
 
 	g_signal_connect(
 		gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(widgets.cy)),
 		"value_changed", 
-		G_CALLBACK(update_cy), 
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateCy), 
 		&streamerPtr->camParams);
 
 	g_signal_connect(
 		widgets.controlWindow,
 		"delete_event", 
-		G_CALLBACK(close_cb),
+		G_CALLBACK(LirenaCaptureXimeaGUI_cb_closeWindow),
 		streamerPtr);
 
 	//g_signal_connect(
@@ -362,48 +362,48 @@ gboolean lirenaCaptureGUI_setupCallbacks(LirenaCaptureApp *appPtr)
 		gtk_range_get_adjustment(
 			GTK_RANGE(appPtr->uiPtr->widgets.gain)),
 		"value_changed",
-		G_CALLBACK(update_gain),
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateGain),
 		&appPtr->streamerPtr->camParams);
 
 	g_signal_connect(
 		gtk_range_get_adjustment(
 			GTK_RANGE(appPtr->uiPtr->widgets.exp)),
 		"value_changed",
-		G_CALLBACK(update_exposure),
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateExposure),
 		&appPtr->streamerPtr->camParams);
 
 	g_signal_connect(
 		gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.x0)),
 		"value_changed",
-		G_CALLBACK(update_x0),
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateX0),
 		&appPtr->streamerPtr->camParams);
 
 	g_signal_connect(
 		gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.y0)),
 		"value_changed",
-		G_CALLBACK(update_y0),
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateY0),
 		&appPtr->streamerPtr->camParams);
 
 	g_signal_connect(
 		gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.cx)),
 		"value_changed", 
-		G_CALLBACK(update_cx), 
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateCx), 
 		&appPtr->streamerPtr->camParams);
 
 	g_signal_connect(
 		gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.cy)),
 		"value_changed", 
-		G_CALLBACK(update_cy), 
+		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateCy), 
 		&appPtr->streamerPtr->camParams);
 
 	g_signal_connect(
 		appPtr->uiPtr->widgets.controlWindow,
 		"delete_event", 
-		G_CALLBACK(close_cb),
+		G_CALLBACK(LirenaCaptureXimeaGUI_cb_closeWindow),
 		appPtr->streamerPtr);
 
 	//g_signal_connect(
@@ -641,7 +641,7 @@ gboolean lirenaCaptureXimeaGUI_updateWidgets(
 
 
 
-GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *message, 
+GstBusSyncReply lirenaCaptureXimeaGUI_cb_handleBusSyncEvent(GstBus *bus, GstMessage *message, 
  	LirenaCaptureUI * displayCtrl) 
 {
 	if (!gst_is_video_overlay_prepare_window_handle_message(message))
@@ -659,7 +659,7 @@ GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *message,
 
 
 
-void video_widget_realize_cb(GtkWidget *widget, 
+void lirenaCaptureXimeaGUI_cb_grabXhandleForVidWindow(GtkWidget *widget, 
 	LirenaCaptureUI* displayCtrl) 
 {
 	GdkWindow *window = gtk_widget_get_window(widget);
@@ -675,7 +675,7 @@ void video_widget_realize_cb(GtkWidget *widget,
 
 
 
-gboolean close_cb(GtkWidget *, GdkEvent *,
+gboolean LirenaCaptureXimeaGUI_cb_closeWindow(GtkWidget *, GdkEvent *,
 				  LirenaStreamer* streamerPtr)
 {
 	// pointer non null and pointee not 0 --> video thread is active
@@ -712,7 +712,7 @@ gboolean close_cb(GtkWidget *, GdkEvent *,
 // }
 
 
-gboolean update_x0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
+gboolean lirenaCaptureXimeaGUI_cb_updateX0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	
 	cam->roix0 = gtk_adjustment_get_value(adj);
@@ -725,7 +725,7 @@ gboolean update_x0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //
 	return TRUE;
 }
 
-gboolean update_y0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
+gboolean lirenaCaptureXimeaGUI_cb_updateY0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	cam->roiy0 = gtk_adjustment_get_value(adj);
 	if (cam->roicy + cam->roiy0 > cam->maxcy)
@@ -737,7 +737,7 @@ gboolean update_y0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //
 	return TRUE;
 }
 
-gboolean update_cx(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
+gboolean lirenaCaptureXimeaGUI_cb_updateCx(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	cam->roicx = gtk_adjustment_get_value(adj);
 	if (cam->roix0 + cam->roicx > cam->maxcx)
@@ -749,7 +749,7 @@ gboolean update_cx(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //
 	return TRUE;
 }
 
-gboolean update_cy(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
+gboolean lirenaCaptureXimeaGUI_cb_updateCy(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	cam->roicy = gtk_adjustment_get_value(adj);
 	if (cam->roiy0 + cam->roicy > cam->maxcy)
@@ -761,7 +761,7 @@ gboolean update_cy(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //
 	return TRUE;
 }
 
-gboolean update_exposure(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
+gboolean lirenaCaptureXimeaGUI_cb_updateExposure(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	xiSetParamInt(cam->cameraHandle, XI_PRM_EXPOSURE, 
 		1000 * gtk_adjustment_get_value(adj));
@@ -769,7 +769,7 @@ gboolean update_exposure(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *c
 	return TRUE;
 }
 
-gboolean update_gain(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
+gboolean lirenaCaptureXimeaGUI_cb_updateGain(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //gpointer)
 {
 	xiSetParamFloat(cam->cameraHandle, XI_PRM_GAIN, gtk_adjustment_get_value(adj));
 	return TRUE;

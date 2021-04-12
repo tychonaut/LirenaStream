@@ -510,11 +510,11 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 		g_signal_connect(appPtr->uiPtr->widgets.videoWindow,
 						"realize", 
-						G_CALLBACK(video_widget_realize_cb), 
+						G_CALLBACK(lirenaCaptureXimeaGUI_cb_grabXhandleForVidWindow), 
 						appPtr->uiPtr);
 
 		g_signal_connect(appPtr->uiPtr->widgets.videoWindow,
-						"delete-event", G_CALLBACK(close_cb),
+						"delete-event", G_CALLBACK(LirenaCaptureXimeaGUI_cb_closeWindow),
 						appPtr->streamerPtr);
 
 		gtk_widget_show_all(appPtr->uiPtr->widgets.videoWindow);
@@ -551,7 +551,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 	{
 		bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
 		gst_bus_set_sync_handler(bus, 
-								(GstBusSyncHandler)bus_sync_handler,
+								(GstBusSyncHandler)lirenaCaptureXimeaGUI_cb_handleBusSyncEvent,
 								appPtr->uiPtr,
 								NULL);
 		gst_object_unref(bus);
