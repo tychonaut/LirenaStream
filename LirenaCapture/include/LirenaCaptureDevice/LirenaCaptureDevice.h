@@ -36,6 +36,18 @@ class LirenaCaptureDevice
       return deviceType;
     }
 
+    // needed for GStreamer pipeline management:
+    bool typeImpliesGstAppSrc()
+    {
+      return 
+        (deviceType == LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera)
+        ||
+        (deviceType == LIRENA_CAPTURE_DEVICE_TYPE_MagewellEcoCapture)
+        ||
+        (deviceType == LIRENA_CAPTURE_DEVICE_TYPE_MagewellProCapture)
+        ;
+    }
+
     // dummy implementations to check workflow
     
     //setup
