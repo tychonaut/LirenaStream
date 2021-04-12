@@ -270,43 +270,63 @@ gboolean lirenaCaptureGUI_createWidgets(LirenaCaptureUI *dispCtrl)
 	return TRUE;
 }
 
-
-
-gboolean lirenaCaptureGUI_setupCallbacks(LirenaCaptureApp * appPtr)
+gboolean lirenaCaptureGUI_setupCallbacks(LirenaCaptureApp *appPtr)
 {
 	g_signal_connect(
 		gtk_range_get_adjustment(
 			GTK_RANGE(appPtr->uiPtr->widgets.gain)),
-		"value_changed", 
-		G_CALLBACK(update_gain), 
-		&appPtr->streamerPtr->camParams
-	);
+		"value_changed",
+		G_CALLBACK(update_gain),
+		&appPtr->streamerPtr->camParams);
 
 	g_signal_connect(
 		gtk_range_get_adjustment(
 			GTK_RANGE(appPtr->uiPtr->widgets.exp)),
-		"value_changed", 
+		"value_changed",
 		G_CALLBACK(update_exposure),
-		 &appPtr->streamerPtr->camParams
-	);
+		&appPtr->streamerPtr->camParams);
 
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.x0)),
-					 "value_changed", G_CALLBACK(update_x0), &appPtr->streamerPtr->camParams);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.y0)),
-					 "value_changed", G_CALLBACK(update_y0), &appPtr->streamerPtr->camParams);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.cx)),
-					 "value_changed", G_CALLBACK(update_cx), &appPtr->streamerPtr->camParams);
-	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.cy)),
-					 "value_changed", G_CALLBACK(update_cy), &appPtr->streamerPtr->camParams);
-	//g_signal_connect(appPtr->uiPtr->widgets.show, "toggled",
+	g_signal_connect(
+		gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.x0)),
+		"value_changed",
+		G_CALLBACK(update_x0),
+		&appPtr->streamerPtr->camParams);
+
+	g_signal_connect(
+		gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.y0)),
+		"value_changed",
+		G_CALLBACK(update_y0),
+		&appPtr->streamerPtr->camParams);
+
+	g_signal_connect(
+		gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.cx)),
+		"value_changed", 
+		G_CALLBACK(update_cx), 
+		&appPtr->streamerPtr->camParams);
+
+	g_signal_connect(
+		gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.cy)),
+		"value_changed", 
+		G_CALLBACK(update_cy), 
+		&appPtr->streamerPtr->camParams);
+
+	g_signal_connect(
+		appPtr->uiPtr->widgets.controlWindow,
+		"delete_event", 
+		G_CALLBACK(close_cb),
+		appPtr->streamerPtr);
+
+	//g_signal_connect(
+	//	appPtr->uiPtr->widgets.show,
+	//  "toggled",
 	//				 G_CALLBACK(update_show), &appPtr->streamerPtr->camParams);
-	g_signal_connect(appPtr->uiPtr->widgets.controlWindow,
-					 "delete_event", G_CALLBACK(close_cb), 
-					 appPtr->streamerPtr);
 
 	return TRUE;
 }
-
 
 gboolean lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(
 	LirenaCaptureApp * appPtr)
