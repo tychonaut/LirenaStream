@@ -403,16 +403,8 @@ gchar* constructGstreamerPipelineString(LirenaConfig const * config)
 	g_snprintf(gstreamerPipelineString,
 			   (gulong) LIRENA_MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
 			   
-			   // KLV appsrc
-			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=klvSrc ! "
-			   "   meta/x-klv, parsed=true ! "
-			   // Mpeg2TS muxer:
-			   // TODO check: maybe alignment 7 for UDP!? as gstinspect says!
-			   " mpegtsmux name=mp2ts_muxer alignment=0 " 
-			   ""
-
-
 			   // Video appsrc, encode h264, to muxer:
+			   // TODO outsource to snippet to make replaceable by videotestsrc
 			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=captureAppSrc ! "
 			   ""
 			   //{ 
@@ -430,11 +422,17 @@ gchar* constructGstreamerPipelineString(LirenaConfig const * config)
 			   " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
 			   " h264parse  disable-passthrough=true ! " //config-interval=-1  <--may be required in TCP?...
 			   ""
-			   
-			   " mp2ts_muxer. "
+			   // Mpeg2TS muxer:
+			   // TODO check: maybe alignment 7 for UDP!? as gstinspect says!
+			   " mpegtsmux name=mp2ts_muxer alignment=0 " 
 			   ""
+			   // KLV appsrc; TODO outsource to snippet to make optional
+			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=klvSrc ! "
+			   "   meta/x-klv, parsed=true ! "
+			   " mp2ts_muxer. "
+
 			   // prepare muxed stream for network transmission:
-			   " mp2ts_muxer.! "
+			   " mp2ts_muxer. ! "
 			   "   tsparse ! "
 			   "   queue max-size-time=30000000000 max-size-bytes=0 max-size-buffers=0 ! "
 			   "   %s " // optional fork to dump-to-disk
