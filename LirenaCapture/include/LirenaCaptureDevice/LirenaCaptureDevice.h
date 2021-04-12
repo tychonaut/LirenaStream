@@ -22,6 +22,7 @@ class LirenaCaptureDevice
     static LirenaCaptureDevice* createCaptureDevice(
       LirenaConfig * configPtr 
     );
+
   protected:
     // do not instanciate directly 
     // (pure abstractness omitted during refactoring)
@@ -30,7 +31,8 @@ class LirenaCaptureDevice
   public:
     virtual ~LirenaCaptureDevice();
 
-    LirenaCaptureDeviceType getType() {
+    LirenaCaptureDeviceType getType() 
+    {
       return deviceType;
     }
 
@@ -39,34 +41,51 @@ class LirenaCaptureDevice
     //setup
     virtual bool openDevice() {return false;}
     virtual bool setupParams()  {return false;}
-    virtual bool startVideoAquisition()  {return false;}
+    virtual bool startVideoAquisition() {return false;}
 
-    // acquisition, proecessing, enhancing (w/ metadata), "publishing"
+    // acquisition, processing (e.g. debayer), enhancing (w/ metadata),
     virtual bool getFrame() {return false;}
     virtual bool postProcessFrame() {return false;}
     virtual bool calcTiming() {return false;}
     virtual bool acquireFrameMetadata() {return false;}
     
+    // "publishing"
     bool pushFrameMetaDataToGstreamer() {return false;}
     virtual bool pushVideoFrameToGstreamer() {return false;}
 
 
   protected: 
     LirenaConfig  * configPtr = nullptr;
+
+  private:
     LirenaCaptureDeviceType deviceType = LIRENA_CAPTURE_DEVICE_TYPE_invalid;
 };
 
 
 //TODO outsource
+
+//LirenaGstVideotestsrcCaptureDevice
+class LirenaGstVideotestsrcCaptureDevice : public LirenaCaptureDevice
+{
+  public:
+
+    explicit LirenaGstVideotestsrcCaptureDevice(LirenaConfig * configPtr);
+
+    virtual ~LirenaGstVideotestsrcCaptureDevice();
+
+    //TODO add virtual functions
+
+};
+
 class LirenaXimeaCaptureDevice : public LirenaCaptureDevice
 {
   public:
 
     explicit LirenaXimeaCaptureDevice(LirenaConfig * configPtr);
 
-
     virtual ~LirenaXimeaCaptureDevice();
 
+    //TODO add virtual functions
 
 };
 
@@ -77,9 +96,9 @@ class LirenaMagewellEcoCaptureDevice : public LirenaCaptureDevice
   
     explicit LirenaMagewellEcoCaptureDevice(LirenaConfig * configPtr);
   
-
     virtual ~LirenaMagewellEcoCaptureDevice();
 
+    //TODO add virtual functions
 
 };
 

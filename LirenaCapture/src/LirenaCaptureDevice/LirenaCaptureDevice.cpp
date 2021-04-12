@@ -9,6 +9,9 @@ LirenaCaptureDevice* LirenaCaptureDevice::createCaptureDevice(
 {
     switch (configPtr->captureDeviceType)
     {
+    case LIRENA_CAPTURE_DEVICE_TYPE_videotestsrc:
+        return new LirenaGstVideotestsrcCaptureDevice(configPtr);
+        break;
     case LIRENA_CAPTURE_DEVICE_TYPE_XimeaCamera:
         return new LirenaXimeaCaptureDevice(configPtr);
         break;
@@ -25,7 +28,8 @@ LirenaCaptureDevice* LirenaCaptureDevice::createCaptureDevice(
 }
 
 LirenaCaptureDevice::LirenaCaptureDevice(LirenaConfig *configPtr)
-    : configPtr(configPtr)
+    : configPtr(configPtr),
+    deviceType(configPtr->captureDeviceType)
 {
 }
 
@@ -34,8 +38,29 @@ LirenaCaptureDevice::~LirenaCaptureDevice()
 }
 
 
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+// subclass impls.
+// TODO outsource
 
-//TODO outsource
+
+LirenaGstVideotestsrcCaptureDevice::LirenaGstVideotestsrcCaptureDevice(
+    LirenaConfig * configPtr)
+    : LirenaCaptureDevice(configPtr)
+{
+}
+
+
+LirenaGstVideotestsrcCaptureDevice::~LirenaGstVideotestsrcCaptureDevice()
+{
+
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
 LirenaXimeaCaptureDevice::LirenaXimeaCaptureDevice(LirenaConfig * configPtr)
     : LirenaCaptureDevice(configPtr)
 {
@@ -47,6 +72,8 @@ LirenaXimeaCaptureDevice::~LirenaXimeaCaptureDevice()
 
 }
 
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 
 LirenaMagewellEcoCaptureDevice::LirenaMagewellEcoCaptureDevice(
     LirenaConfig * configPtr)
