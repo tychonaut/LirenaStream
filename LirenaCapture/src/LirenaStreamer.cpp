@@ -41,26 +41,71 @@ LirenaStreamer::LirenaStreamer(LirenaConfig * configPtr)
 LirenaStreamer::~LirenaStreamer()
 {
 	if(captureThreadIsRunning)
-	{	
-		g_assert(captureThread != 0);
+	{
+		terminateCaptureThread();
+	}
 
-		//TODO set acquire to false
-		doAcquireFrames=false;
-		pthread_join(captureThread, NULL);
-
-		captureThread = 0;
-		captureThreadIsRunning = false;
-	} 
-
-	delete captureDevicePtr;
+	if(captureDevicePtr)
+	{
+		delete captureDevicePtr;
+		captureDevicePtr = nullptr;
+	}
+	else
+	{
+		GST_WARNING("captureDevicePtr is already null"
+					" on LirenaStreamer destructor");
+	}
 }
 
 
-		bool setupCaptureDevice();
-		bool setupGStreamerPipeline();
+//TODO continue here
+bool LirenaStreamer::setupCaptureDevice()
+{
+	g_assert(0&& "TODO implement");
+	return false;
+}
+		
+bool LirenaStreamer::setupGStreamerPipeline()
+{
+	g_assert(0&& "TODO implement");
+	return false;
+}
 
-		bool launchCaptureThread();
-		bool terminateCaptureThread();
+bool LirenaStreamer::launchCaptureThread()
+{
+	g_assert(0&& "TODO implement");
+	return false;
+}
+
+bool LirenaStreamer::terminateCaptureThread()
+{
+	if(captureThreadIsRunning)
+	{	
+		g_assert(captureThread != 0 &&
+        	"enforce logical consistency between "
+			"thread running guard and thread ID variable");
+
+
+		//TODO set acquire to false to make thread loop end
+		doAcquireFrames=false;
+		//wait for thread ending
+		pthread_join(captureThread, NULL);
+
+		//cleanup variables
+		captureThread = 0;
+		captureThreadIsRunning = false;
+
+		return true;
+	} 
+	else
+	{
+		g_assert(captureThread == 0 && 
+		         "enforce logical consistency between "
+				 "thread running guard and thread ID variable");
+				 
+		return true;
+	}
+}
 
 
 

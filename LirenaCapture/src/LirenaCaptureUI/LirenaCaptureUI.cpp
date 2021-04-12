@@ -61,6 +61,7 @@ LirenaCaptureUI::~LirenaCaptureUI()
 
 bool LirenaCaptureUI::setupUI()
 {
+	g_assert(pureMainLoop == nullptr);
 	pureMainLoop = g_main_loop_new (NULL, FALSE);
 	return pureMainLoop != nullptr;
 }
@@ -81,9 +82,33 @@ bool LirenaCaptureUI::setupCallbacks()
 	return true;
  }
 
+ bool LirenaCaptureUI::exitMainLoop()
+ {
+	if(pureMainLoop != nullptr)
+	{
+		g_main_loop_quit(pureMainLoop);
+		pureMainLoop = nullptr;
+
+		return true;
+	}
+	else
+	{
+		GST_WARNING("%s", 
+			"LirenaCaptureUI::shutdownUI() called on main loop nullptr;\n"
+			"Maybe it is called more than once?");
+
+		return true;
+	}
+ }
+
+
 bool LirenaCaptureUI::shutdownUI()
 {
-	g_main_loop_quit(pureMainLoop);
+	if(pureMainLoop != nullptr)
+	{
+		exitMainLoop();
+		g_assert(pureMainLoop == nullptr);
+	}
 
 	return true;
 }
@@ -132,6 +157,12 @@ bool LirenaCaptureXimeaGUI::setupCallbacks()
 	return false;
  }
 
+  bool LirenaCaptureXimeaGUI::exitMainLoop()
+ {
+	GST_ERROR("LirenaCaptureXimeaGUI::exitMainLoop(): TODO IMPLEMENT");
+	return false;
+ }
+
 
 bool LirenaCaptureXimeaGUI::shutdownUI()
 {
@@ -167,13 +198,13 @@ bool lirenaCaptureDisplayController_setupWidgets(LirenaCaptureUI *dispCtrl)
 	dispCtrl->widgets.y0 = gtk_spin_button_new_with_range(0, 128, 2); //use dummy max limit
 	dispCtrl->widgets.cx = gtk_spin_button_new_with_range(4, 128, 4); //use dummy max limit
 	dispCtrl->widgets.cy = gtk_spin_button_new_with_range(2, 128, 2); //use dummy max limit
-	dispCtrl->widgets.raw = gtk_toggle_button_new_with_label("Display RAW data");
+	//dispCtrl->widgets.raw = gtk_toggle_button_new_with_label("Display RAW data");
 	//dispCtrl->widgets.show = gtk_toggle_button_new_with_label("Live view");
 	dispCtrl->widgets.run = gtk_toggle_button_new_with_label("Acquisition");
 	//tune them
 	gtk_window_set_title(GTK_WINDOW(dispCtrl->widgets.controlWindow), "capture control");
 	gtk_window_set_keep_above(GTK_WINDOW(dispCtrl->widgets.controlWindow), TRUE);
-	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dispCtrl->widgets.raw), TRUE);
+	//gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dispCtrl->widgets.raw), TRUE);
 	//gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dispCtrl->widgets.show), TRUE);
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dispCtrl->widgets.run), TRUE); //actual start is delayed by 100ms, see below
 	gtk_widget_set_sensitive(dispCtrl->widgets.boxgpi, FALSE);
@@ -207,7 +238,7 @@ bool lirenaCaptureDisplayController_setupWidgets(LirenaCaptureUI *dispCtrl)
 	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.exp);
 	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.labelgain);
 	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.gain);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.raw);
+	//gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.raw);
 	//gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.show);
 	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.run);
 	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.controlWindow), dispCtrl->widgets.boxmain);
@@ -215,28 +246,40 @@ bool lirenaCaptureDisplayController_setupWidgets(LirenaCaptureUI *dispCtrl)
 	return true;
 }
 
-
-bool lirenaCaptureDisplayController_setupCallbacks(LirenaCaptureApp * appPtr)
+//lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets
+bool lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(
+	LirenaCaptureApp * appPtr)
 {
     //register handlers
 
 
-	// button sensitivity callback: irrelevant for non-GUI mode
-	gdk_threads_add_timeout(1000, 
-        (GSourceFunc)lirenaCaptureDisplayController_initCamButtonSensitivity,
-        (gpointer)appPtr);
-
-
-	// some kind of hack to force ANOTHER callback to be called early...
-	// ... don't understand the details (MS)
-	// is irrelevant for non-GUI mode
-	//only way I (ximea dev) found to make sure window is displayed right away:
+	// some kind of hack to force ANOTHER callback to be called early:
+	// init the cam and  start the captureThread! 
+	// instead of calling this functionality directly...
+	// 
+	// cb is irrelevant for non-GUI mode.
+	// ximea dev's comment :
+	// "only way I found to make sure window is displayed right away"
 	gdk_threads_add_timeout(100, 
 		(GSourceFunc)lirenaCaptureDisplayController_startHack_cb, 
 		(gpointer)appPtr); 
 
 
+	// button sensitivity callback: irrelevant for non-GUI mode
+	// another hack of the above kind: 
+	// instead of calling the functions directly on program start,
+	//  there is some messing around with timeouts and callbacks
+	// and of course the camera itself  0o.
+	// TODO detangle this stuff!!
+	gdk_threads_add_timeout(1000, 
+        (GSourceFunc)lirenaCaptureDisplayController_initCamButtonSensitivity,
+        (gpointer)appPtr);
 
+
+
+
+
+	// "actual callbacks" only beginning here: --------------------------
 
 
 	//this callback has important functionality that is also required without GUI
@@ -245,8 +288,9 @@ bool lirenaCaptureDisplayController_setupCallbacks(LirenaCaptureApp * appPtr)
 
 
 
-	g_signal_connect(appPtr->uiPtr->widgets.raw, "toggled",
-					 G_CALLBACK(lirenaCaptureDisplayController_setupCamParams), (gpointer)appPtr);
+	// g_signal_connect(appPtr->uiPtr->widgets.raw, "toggled",
+	// 				 G_CALLBACK(lirenaCaptureDisplayController_setupCamParams), 
+	// 				 (gpointer)appPtr);
 
 
 
@@ -279,13 +323,12 @@ bool lirenaCaptureDisplayController_setupCallbacks(LirenaCaptureApp * appPtr)
 
 
 
-gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButton *run, LirenaCaptureApp *appPtr)
+gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(
+	GtkToggleButton *run, 
+	LirenaCaptureApp *appPtr)
 {
-	LirenaXimeaCaptureWidgets *widgets = &appPtr->uiPtr->widgets;
-
-	gtk_toggle_button_set_inconsistent(run, false);
-	appPtr->streamerPtr->doAcquireFrames = gtk_toggle_button_get_active(run);
-	if (appPtr->streamerPtr->doAcquireFrames && appPtr->streamerPtr->camParams.cameraHandle == INVALID_HANDLE_VALUE)
+	// open cam
+	if( appPtr->streamerPtr->camParams.cameraHandle == INVALID_HANDLE_VALUE)
 	{
 		DWORD nIndex = 0;
 		char *env = getenv("CAM_INDEX");
@@ -301,24 +344,36 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 			appPtr->streamerPtr->doAcquireFrames = FALSE;
 			return TRUE;
 		}
+	}
+
+	//init cam
+	lirenaCaptureDisplayController_setupCamParams(
+		// GTK_TOGGLE_BUTTON(widgets->raw), 
+		true, // raw, as color shizzle is extremely slow
+		appPtr);
+
+	//{ adapt widgets:
+	LirenaXimeaCaptureWidgets *widgets = &appPtr->uiPtr->widgets;
+	gtk_toggle_button_set_inconsistent(run, false);
+	appPtr->streamerPtr->doAcquireFrames = gtk_toggle_button_get_active(run);
+	gtk_widget_set_sensitive(widgets->boxx, appPtr->streamerPtr->doAcquireFrames);
+	gtk_widget_set_sensitive(widgets->boxy, appPtr->streamerPtr->doAcquireFrames);
+	gtk_widget_set_sensitive(widgets->exp, appPtr->streamerPtr->doAcquireFrames);
+	gtk_widget_set_sensitive(widgets->gain, appPtr->streamerPtr->doAcquireFrames);
+	//}
 
 
-		lirenaCaptureDisplayController_setupCamParams(GTK_TOGGLE_BUTTON(widgets->raw), appPtr);
-
-
-
-
+	//{start capture thread
+	if (appPtr->streamerPtr->doAcquireFrames)
+	{
 		if (pthread_create(&appPtr->streamerPtr->captureThread,
 						   NULL, lirena_XimeaStreamer_captureThread_run, (void *)appPtr))
 		{
 			exit(1);
 		}
 	}
+	//}
 
-	gtk_widget_set_sensitive(widgets->boxx, appPtr->streamerPtr->doAcquireFrames);
-	gtk_widget_set_sensitive(widgets->boxy, appPtr->streamerPtr->doAcquireFrames);
-	gtk_widget_set_sensitive(widgets->exp, appPtr->streamerPtr->doAcquireFrames);
-	gtk_widget_set_sensitive(widgets->gain, appPtr->streamerPtr->doAcquireFrames);
 
 	return TRUE;
 }
@@ -327,17 +382,25 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
  
 
 
-gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, LirenaCaptureApp *appPtr)
+gboolean lirenaCaptureDisplayController_setupCamParams(
+	// GtkToggleButton *raw, 
+	bool raw,
+	LirenaCaptureApp *appPtr)
 {
-	LirenaXimeaCaptureWidgets *widgets = &appPtr->uiPtr->widgets;
+
 	HANDLE cameraHandle = appPtr->streamerPtr->camParams.cameraHandle;
+
+	float mingain = 0.0f;
+	float maxgain = 0.0f;
+	float midgain = 0.0f;
 
 	if (cameraHandle != INVALID_HANDLE_VALUE)
 	{
 		// query intrinsic device params
-		float mingain, maxgain;
+
 		xiSetParamInt(cameraHandle, XI_PRM_IMAGE_DATA_FORMAT, 
-			gtk_toggle_button_get_active(raw) ? XI_RAW8 : XI_RGB32);
+			// gtk_toggle_button_get_active(raw) 
+			raw ? XI_RAW8 : XI_RGB32);
 		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
 		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
 		xiGetParamInt(cameraHandle, XI_PRM_WIDTH XI_PRM_INFO_MAX, &appPtr->streamerPtr->camParams.maxcx);
@@ -351,7 +414,7 @@ gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, Lir
 		appPtr->streamerPtr->camParams.roix0 = 0;
 		appPtr->streamerPtr->camParams.roiy0 = 0;
 
-		float midgain = (maxgain + mingain) * 0.5f;
+		midgain = (maxgain + mingain) * 0.5f;
 
 
 		// assign extrinsic device params
@@ -369,9 +432,13 @@ gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, Lir
 		// set exposure from CLI arg
 		xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_EXPOSURE, 
 			1000 * appPtr->configPtr->ximeaparams.exposure_ms);
+	}
 
 
 
+	if (cameraHandle != INVALID_HANDLE_VALUE)
+	{
+		LirenaXimeaCaptureWidgets *widgets = &appPtr->uiPtr->widgets;
 
 		//adapt GUI widgets
 		gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(widgets->gain)),
@@ -398,6 +465,7 @@ gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, Lir
 			appPtr->configPtr->ximeaparams.exposure_ms);
 
 	}
+
 	return TRUE;
 }
 

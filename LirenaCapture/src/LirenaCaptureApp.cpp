@@ -39,10 +39,72 @@ int main(int argc, char **argv);
 
 //----------------------------------------------------------------------------
 
+// creates zero-inited instance and parses and sets args/options
+//LirenaCaptureApp *lirena_captureApp_create(int argc, char **argv)
+LirenaCaptureApp::LirenaCaptureApp(LirenaConfig * configPtr)
+	:
+	configPtr(configPtr),
+	streamerPtr( new LirenaStreamer(configPtr) ),
+	uiPtr( LirenaCaptureUI::createInstance (streamerPtr) )
+{
+
+}
+
+
+LirenaCaptureApp::~LirenaCaptureApp()
+{
+	delete uiPtr;
+	uiPtr = nullptr;
+
+	delete streamerPtr;
+	streamerPtr = nullptr;
+	
+	delete configPtr;
+	configPtr = nullptr;
+};
 
 
 
+bool LirenaCaptureApp::run()
+{
+	bool success = true;
 
+	// first, make device ready: open, init...
+	success &= streamerPtr->setupCaptureDevice();
+	g_assert(success);
+
+	// maybe create GUI and callbacks to streamer and device
+	success &= uiPtr->setupUI();
+	g_assert(success);
+	success &= uiPtr->setupCallbacks();
+	g_assert(success);
+	
+	//configure gstreamer
+	success &= streamerPtr->setupGStreamerPipeline();
+	g_assert(success);
+
+	// start acquiring and "publishing" via gstreamer
+	// in separate thread
+	success &= streamerPtr->launchCaptureThread();
+	g_assert(success);
+
+	// make this (main) thread the (G)UI thread:
+	// no return until UI says so
+	success &= uiPtr->enterMainLoop();
+	g_assert(success);
+
+	//{ cleanup: ---
+	success &= uiPtr->shutdownUI();
+	g_assert(success);
+
+	// shutdown capture thread  (if not already terminated):
+	success &= streamerPtr->terminateCaptureThread();
+	g_assert(success);
+
+	//} ------------
+
+	return success;
+}
 
 
 
@@ -54,12 +116,13 @@ int main(int argc, char **argv)
 	LirenaCaptureUI::init(configPtr);
 	LirenaCaptureApp *appPtr = new LirenaCaptureApp(configPtr);
 
-
+	bool success = appPtr->run();
 
 	delete appPtr;
 	appPtr = nullptr;
 
-	return 0;
+	// exit 0 on success
+	return success ? 0 : 1;
 	
 	//-----------------------------------------------------------------------
 	//old code:
@@ -86,7 +149,7 @@ int main(int argc, char **argv)
 	if(appPtr->configPtr->doLocalDisplay)
 	{
 		bool success = lirenaCaptureDisplayController_setupWidgets(appPtr->uiPtr);
-		success &= lirenaCaptureDisplayController_setupCallbacks(appPtr);		
+		success &= lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(appPtr);		
 		//show GUI windows
 		gtk_widget_show_all(appPtr->uiPtr->widgets.controlWindow);
 		//start the GUI main loop
@@ -179,33 +242,6 @@ int main(int argc, char **argv)
 //----------------------------------------------------------------------------
 
 
-// creates zero-inited instance and parses and sets args/options
-//LirenaCaptureApp *lirena_captureApp_create(int argc, char **argv)
-LirenaCaptureApp::LirenaCaptureApp(LirenaConfig * configPtr)
-	:
-	configPtr(configPtr),
-	streamerPtr( new LirenaStreamer(configPtr) ),
-	uiPtr( LirenaCaptureUI::createInstance (streamerPtr) )
-{
-
-
-
-
-
-}
-
-
-LirenaCaptureApp::~LirenaCaptureApp()
-{
-	delete uiPtr;
-	uiPtr = nullptr;
-
-	delete streamerPtr;
-	streamerPtr = nullptr;
-	
-	delete configPtr;
-	configPtr = nullptr;
-};
 
 
 

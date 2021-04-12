@@ -23,6 +23,9 @@ class LirenaCaptureApp
         LirenaCaptureApp(LirenaConfig * configPtr);
         ~LirenaCaptureApp();
 
+        //return success
+        bool run();
+
         LirenaConfig * configPtr;
 
         LirenaStreamer* streamerPtr;

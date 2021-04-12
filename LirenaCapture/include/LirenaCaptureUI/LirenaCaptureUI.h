@@ -84,7 +84,7 @@ struct LirenaXimeaCaptureWidgets :
         *labelcy, 
         *cy, 
 
-        *raw, 
+        //*raw, 
         //*show, 
         *run;
 };
@@ -126,10 +126,12 @@ class LirenaCaptureUI
         // replace lirenaCaptureDisplayController_setupWidgets
         virtual bool setupUI();//{return true;}
 
-        //replace lirenaCaptureDisplayController_setupCallbacks
+        //replace lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets
         virtual bool setupCallbacks();//{return true;}
 
         virtual bool enterMainLoop();//{return false;}
+
+        virtual bool exitMainLoop();
 
         virtual bool shutdownUI();//{return true;}
 
@@ -179,10 +181,11 @@ class LirenaCaptureXimeaGUI : public LirenaCaptureUI
 
         virtual bool setupUI();//{return true;}
 
-        //replace lirenaCaptureDisplayController_setupCallbacks
+        //replace lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets
         virtual bool setupCallbacks();//{return true;}
 
         virtual bool enterMainLoop();//{return false;}
+        virtual bool exitMainLoop();
 
         virtual bool shutdownUI();//{return true;}
 };
@@ -212,10 +215,13 @@ struct LirenaXimeaStreamer_CameraParams;
 
 // function interface ----------------------------------------------------------
 
-//{ init GUI stuff
+//{ init GUI stuff 
 bool lirenaCaptureDisplayController_setupWidgets(
     LirenaCaptureUI *dispCtrl);
-bool lirenaCaptureDisplayController_setupCallbacks(
+// register callbacks   
+// (and do some awkward cam-init-stuff in timeouted callbacks
+//   that does NOT belong there...)
+bool lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(
     LirenaCaptureApp * appPtr);
 //}
 
@@ -226,7 +232,9 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(
     GtkToggleButton *run,  LirenaCaptureApp* app);
 
 gboolean lirenaCaptureDisplayController_setupCamParams(
-    GtkToggleButton *raw, LirenaCaptureApp* appPtr);
+    //GtkToggleButton *raw, 
+    bool raw,
+    LirenaCaptureApp* appPtr);
 
 
 

@@ -150,6 +150,7 @@ class LirenaStreamer
 
 
 		bool setupCaptureDevice();
+		
 		bool setupGStreamerPipeline();
 
 		bool launchCaptureThread();
