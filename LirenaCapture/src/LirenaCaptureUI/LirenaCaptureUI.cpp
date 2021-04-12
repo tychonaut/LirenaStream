@@ -364,12 +364,12 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallback
 
 	//init cam
 	lirenaCaptureGUI_setupCamParams(appPtr);
-	lirenaCaptureGUI_queryGPIlevels(appPtr);
+	//lirenaCaptureGUI_queryGPIlevels(appPtr);
 
 
 	// adapt GUI widgets to cam params
 	lirenaCaptureGUI_updateWidgets(appPtr);
-	lirenaCaptureGUI_updateGPIWidgets(appPtr);
+	//lirenaCaptureGUI_updateGPIWidgets(appPtr);
 
 	//start acquisition
 	lirenaCaptureGUI_startCaptureThread(appPtr);
@@ -501,7 +501,32 @@ gboolean lirenaCaptureGUI_setupCamParams(
 			1000 * appPtr->configPtr->ximeaparams.exposure_ms);
 
 		//}
+	
+		//{ Query GPI stuff ...
+		// TODO adapt this to the cam mode we actually use, consult
+		// https://www.ximea.com/support/wiki/apis/xiapi_manual#XI_PRM_GPI_SELECTOR-or-gpi_selector
+
+		for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
+		{
+			// select current "logical input pin"
+			xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, 
+				XI_PRM_GPI_SELECTOR, 
+				//seems to start at 1? TODO investigate!
+				i+1);
+			
+			// get status of that "logical input pin".
+			// I don't get the meaning of this yet. 
+			// Logical Pin exists? 
+			// Pin is configured for controlling programmatically? <-- this is my best guess
+			// Kind of Signal that is required to "fire" (0, 1, falling, rising flank)?
+			xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, 
+				XI_PRM_GPI_LEVEL, 
+				& appPtr->streamerPtr->camParams.gpi_levels[i]);
+		}
+		//} end GPI stuff 
 	}
+
+
 
 	return TRUE;
 }
@@ -545,10 +570,7 @@ gboolean lirenaCaptureGUI_updateWidgets(
 			gtk_range_get_adjustment(GTK_RANGE(widgets->exp)),
 			appPtr->configPtr->ximeaparams.exposure_ms);
 
-		//{ adapt widgets, part 2 0_o:
 
-		// gtk_toggle_button_set_inconsistent(run, false);
-		// appPtr->streamerPtr->doAcquireFrames = gtk_toggle_button_get_active(run);
 		g_assert(appPtr->streamerPtr->doAcquireFrames && 
 			"should be true all the time in this minimal setup");
 		appPtr->streamerPtr->doAcquireFrames = true; 
@@ -557,8 +579,15 @@ gboolean lirenaCaptureGUI_updateWidgets(
 		gtk_widget_set_sensitive(widgets->boxy, appPtr->streamerPtr->doAcquireFrames);
 		gtk_widget_set_sensitive(widgets->exp, appPtr->streamerPtr->doAcquireFrames);
 		gtk_widget_set_sensitive(widgets->gain, appPtr->streamerPtr->doAcquireFrames);
-		//}
-
+	
+		//GPI stuff; TODO understand this ...
+		for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
+		{
+			gtk_toggle_button_set_active(
+				GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi_levels[i]), 
+				appPtr->streamerPtr->camParams.gpi_levels[i]);
+		}
+		//} end GPI stuff
 	}
 
 	return TRUE;
