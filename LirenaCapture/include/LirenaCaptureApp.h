@@ -31,12 +31,6 @@ class LirenaCaptureApp
         // TODO make pointer cause actract and factory...
         LirenaCaptureUI* uiPtr;
         
-//TODO outsource to LirenaNetworkUI
-        // non-GUI loop for bus-listening,
-        // in case local displaying is not requested;
-        // probably not nececcary as long as no listening to 
-        // any messages ;()
-        GMainLoop *pureMainLoop;
 
 };
 

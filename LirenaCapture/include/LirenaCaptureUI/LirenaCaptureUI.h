@@ -124,18 +124,26 @@ class LirenaCaptureUI
         // Setup network sockets or widgets
         //TODO make pure abstract and subclass
         // replace lirenaCaptureDisplayController_setupWidgets
-        virtual bool setupUI(){return true;}
+        virtual bool setupUI();//{return true;}
 
         //replace lirenaCaptureDisplayController_setupCallbacks
-        virtual bool setupCallbacks(){return true;}
+        virtual bool setupCallbacks();//{return true;}
 
-        virtual bool shutdownUI(){return true;}
+        virtual bool enterMainLoop();//{return false;}
+
+        virtual bool shutdownUI();//{return true;}
 
 
 
         //contains pointers to config and capture device, to all is there
         // for the UI
         LirenaStreamer* streamerPtr;
+
+        // non-GUI loop for bus-listening,
+        // in case local displaying is not requested;
+        // probably not nececcary as long as no listening to 
+        // any messages ;()
+        GMainLoop *pureMainLoop = nullptr;
 
 
 
@@ -173,6 +181,8 @@ class LirenaCaptureXimeaGUI : public LirenaCaptureUI
 
         //replace lirenaCaptureDisplayController_setupCallbacks
         virtual bool setupCallbacks();//{return true;}
+
+        virtual bool enterMainLoop();//{return false;}
 
         virtual bool shutdownUI();//{return true;}
 };

@@ -78,10 +78,10 @@ int main(int argc, char **argv)
 	  	gtk_init(&argc, &argv);
 	}
 
-	// have transformed until here ----	
 
 	gst_init(&argc, &argv);
 
+	// have transformed until here ----	
 
 	if(appPtr->configPtr->doLocalDisplay)
 	{
@@ -99,7 +99,8 @@ int main(int argc, char **argv)
 		// No-GUI- start-up:
 
 		//non-GUI-glib main loop for GStreamer
-		appPtr->pureMainLoop = g_main_loop_new (NULL, FALSE);
+		appPtr->uiPtr->setupUI();
+		//appPtr->pureMainLoop = g_main_loop_new (NULL, FALSE);
 
 		if (//shall capture ?
 			appPtr->streamerPtr->doAcquireFrames 
@@ -151,7 +152,8 @@ int main(int argc, char **argv)
 		}
 
 		//non-GUI bus listening (no callbacks specced right now, though)
-		g_main_loop_run(appPtr->pureMainLoop);
+		//g_main_loop_run(appPtr->pureMainLoop);
+		appPtr->uiPtr->enterMainLoop();
 
 	}	
 

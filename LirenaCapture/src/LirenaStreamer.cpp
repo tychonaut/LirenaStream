@@ -900,7 +900,8 @@ void * lirena_XimeaStreamer_captureThread_terminate(LirenaCaptureApp *appPtr)
 	}
 	else
 	{
-		g_main_loop_quit(appPtr->pureMainLoop);
+		//g_main_loop_quit(appPtr->pureMainLoop);
+		appPtr->uiPtr->shutdownUI();
 	}
 
 	xiStopAcquisition(appPtr->streamerPtr->camParams.cameraHandle);

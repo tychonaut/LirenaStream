@@ -46,7 +46,8 @@ LirenaCaptureUI* LirenaCaptureUI::createInstance(LirenaStreamer* streamerPtr)
 
 LirenaCaptureUI::LirenaCaptureUI(LirenaStreamer* streamerPtr)
 	:
-	streamerPtr(streamerPtr)
+	streamerPtr(streamerPtr),
+	pureMainLoop(nullptr)
 {
 
 }
@@ -56,6 +57,46 @@ LirenaCaptureUI::~LirenaCaptureUI()
 	//TODO think: is this sensible?
 	shutdownUI();
 }
+
+
+bool LirenaCaptureUI::setupUI()
+{
+	pureMainLoop = g_main_loop_new (NULL, FALSE);
+	return pureMainLoop != nullptr;
+}
+
+
+bool LirenaCaptureUI::setupCallbacks()
+{
+	// nothing to do in this minimal base class;
+	return true;
+}
+
+
+ bool LirenaCaptureUI::enterMainLoop()
+ {
+	//non-GUI bus listening (no callbacks specced right now, though)
+	g_main_loop_run(pureMainLoop);
+	
+	return true;
+ }
+
+bool LirenaCaptureUI::shutdownUI()
+{
+	g_main_loop_quit(pureMainLoop);
+
+	return true;
+}
+
+
+
+
+
+
+
+
+
+
 
 
 //-----------------------------------------------------------------------------
@@ -83,6 +124,13 @@ bool LirenaCaptureXimeaGUI::setupCallbacks()
 	GST_ERROR("LirenaCaptureXimeaGUI::setupCallbacks(): TODO IMPLEMENT");
 	return false;
 }
+
+
+ bool LirenaCaptureXimeaGUI::enterMainLoop()
+ {
+	GST_ERROR("LirenaCaptureXimeaGUI::enterMainLoop(): TODO IMPLEMENT");
+	return false;
+ }
 
 
 bool LirenaCaptureXimeaGUI::shutdownUI()
