@@ -73,7 +73,21 @@ class LirenaGstVideotestsrcCaptureDevice : public LirenaCaptureDevice
 
     virtual ~LirenaGstVideotestsrcCaptureDevice();
 
-    //TODO add virtual functions
+
+
+    virtual bool openDevice();
+    virtual bool setupParams();
+    virtual bool startVideoAquisition();
+
+    // acquisition, processing (e.g. debayer), enhancing (w/ metadata),
+    virtual bool getFrame();
+    virtual bool postProcessFrame();
+    virtual bool calcTiming();
+    virtual bool acquireFrameMetadata();
+    
+    // "publishing"
+    bool pushFrameMetaDataToGstreamer();
+    virtual bool pushVideoFrameToGstreamer();
 
 };
 
@@ -85,7 +99,19 @@ class LirenaXimeaCaptureDevice : public LirenaCaptureDevice
 
     virtual ~LirenaXimeaCaptureDevice();
 
-    //TODO add virtual functions
+    virtual bool openDevice();
+    virtual bool setupParams();
+    virtual bool startVideoAquisition();
+
+    // acquisition, processing (e.g. debayer), enhancing (w/ metadata),
+    virtual bool getFrame();
+    virtual bool postProcessFrame();
+    virtual bool calcTiming();
+    virtual bool acquireFrameMetadata();
+    
+    // "publishing"
+    bool pushFrameMetaDataToGstreamer();
+    virtual bool pushVideoFrameToGstreamer();
 
 };
 
