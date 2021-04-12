@@ -345,18 +345,6 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallback
 	// 	(GSourceFunc)lirenaCaptureGUI_WEIRDcb__opCam_setupCamPrms_updWidgs_startCapThrd, 
 	// 	(gpointer)appPtr); 
 
-	// above awkward timeout func expands to direct calls:
-
-	// open cam
-	lirenaCaptureGUI_openCam(appPtr);
-	//init cam
-	lirenaCaptureGUI_setupCamParams(appPtr);
-	// adapt GUI widgets to cam params
-	lirenaCaptureGUI_updateWidgets(appPtr);
-	//start acquisition
-	lirenaCaptureGUI_startCaptureThread(appPtr);
-
-
 	// // button sensitivity callback: irrelevant for non-GUI mode
 	// // another hack of the above kind: 
 	// // instead of calling the functions directly on program start,
@@ -367,28 +355,27 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallback
     //     (GSourceFunc)lirenaCaptureGUI_queryGPIlevels_updateWidgets,
     //     (gpointer)appPtr);
 
-	// above awkward timeout func expands to direct calls:
 
+	// above awkward timeout funcs expands to direct calls:
+
+
+	// open cam
+	lirenaCaptureGUI_openCam(appPtr);
+
+	//init cam
+	lirenaCaptureGUI_setupCamParams(appPtr);
 	lirenaCaptureGUI_queryGPIlevels(appPtr);
 
+
+	// adapt GUI widgets to cam params
+	lirenaCaptureGUI_updateWidgets(appPtr);
 	lirenaCaptureGUI_updateGPIWidgets(appPtr);
 
+	//start acquisition
+	lirenaCaptureGUI_startCaptureThread(appPtr);
 
-
-	// "actual callbacks" only beginning here: --------------------------
-
-
-	//this callback has important functionality that is also required without GUI
-	//g_signal_connect(appPtr->uiPtr->widgets.run, "toggled",
-	//				 G_CALLBACK(lirenaCaptureGUI_openCam_setupCam_updateGUI_startCaptureThread), (gpointer)appPtr); 
-
-	// g_signal_connect(appPtr->uiPtr->widgets.raw, "toggled",
-	// 				 G_CALLBACK(lirenaCaptureGUI_setupCamParams_updateWidgets), 
-	// 				 (gpointer)appPtr);
-
-
+	// "actual callbacks" only begin here: --------------------------
 	lirenaCaptureGUI_setupCallbacks(appPtr);
-
 
 
     return TRUE;
