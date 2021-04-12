@@ -151,9 +151,25 @@ int main(int argc, char **argv)
 		bool success = true; 
 		success &= lirenaCaptureGUI_createWidgets(appPtr->uiPtr);
 
-		success &= lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(appPtr);
-		
-				
+		//success &= lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(appPtr);
+
+	// open cam
+	lirenaCaptureGUI_openCam(appPtr);
+	//init cam
+	lirenaCaptureGUI_setupCamParams(appPtr);
+	lirenaCaptureGUI_queryGPIlevels(appPtr);
+	// adapt GUI widgets to cam params
+	lirenaCaptureGUI_updateWidgets(appPtr);
+	lirenaCaptureGUI_updateGPIWidgets(appPtr);
+
+
+	//start acquisition
+	lirenaCaptureGUI_startCaptureThread(appPtr);
+
+
+
+
+
 		//show GUI windows
 		gtk_widget_show_all(appPtr->uiPtr->widgets.controlWindow);
 		//start the GUI main loop

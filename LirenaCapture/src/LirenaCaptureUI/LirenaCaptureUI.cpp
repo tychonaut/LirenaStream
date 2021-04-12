@@ -174,7 +174,7 @@ bool LirenaCaptureXimeaGUI::shutdownUI()
 //-----------------------------------------------------------------------------
 
 //lirenaCaptureGUI_createWidgets
-bool lirenaCaptureGUI_createWidgets(LirenaCaptureUI *dispCtrl)
+gboolean lirenaCaptureGUI_createWidgets(LirenaCaptureUI *dispCtrl)
 {
 	//create widgets
 	dispCtrl->widgets.controlWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -267,63 +267,29 @@ bool lirenaCaptureGUI_createWidgets(LirenaCaptureUI *dispCtrl)
 	//gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.run);
 	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.controlWindow), dispCtrl->widgets.boxmain);
 
-	return true;
+	return TRUE;
 }
 
-//lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets
-bool lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(
-	LirenaCaptureApp * appPtr)
+
+
+gboolean lirenaCaptureGUI_setupCallbacks(LirenaCaptureApp * appPtr)
 {
-    //register handlers
+	g_signal_connect(
+		gtk_range_get_adjustment(
+			GTK_RANGE(appPtr->uiPtr->widgets.gain)),
+		"value_changed", 
+		G_CALLBACK(update_gain), 
+		&appPtr->streamerPtr->camParams
+	);
 
+	g_signal_connect(
+		gtk_range_get_adjustment(
+			GTK_RANGE(appPtr->uiPtr->widgets.exp)),
+		"value_changed", 
+		G_CALLBACK(update_exposure),
+		 &appPtr->streamerPtr->camParams
+	);
 
-	// some kind of hack to force ANOTHER callback to be called early:
-	// init the cam and  start the captureThread! 
-	// instead of calling this functionality directly...
-	// 
-	// cb is irrelevant for non-GUI mode.
-	// ximea dev's comment :
-	// "only way I found to make sure window is displayed right away"
-	gdk_threads_add_timeout(100, 
-		(GSourceFunc)lirenaCaptureDisplayController_startHack_cb, 
-		(gpointer)appPtr); 
-
-
-	// button sensitivity callback: irrelevant for non-GUI mode
-	// another hack of the above kind: 
-	// instead of calling the functions directly on program start,
-	//  there is some messing around with timeouts and callbacks
-	// and of course the camera itself  0o.
-	// TODO detangle this stuff!!
-	gdk_threads_add_timeout(1000, 
-        (GSourceFunc)lirenaCaptureDisplayController_initCamButtonSensitivity,
-        (gpointer)appPtr);
-
-
-
-
-
-	// "actual callbacks" only beginning here: --------------------------
-
-
-	//this callback has important functionality that is also required without GUI
-	//g_signal_connect(appPtr->uiPtr->widgets.run, "toggled",
-	//				 G_CALLBACK(lirenaCaptureGUI_openCam_setupCam_updateGUI_startCaptureThread), (gpointer)appPtr); 
-
-
-
-	// g_signal_connect(appPtr->uiPtr->widgets.raw, "toggled",
-	// 				 G_CALLBACK(lirenaCaptureGUI_setupCamParams_updateWidgets), 
-	// 				 (gpointer)appPtr);
-
-
-
-
-
-	g_signal_connect(gtk_range_get_adjustment(GTK_RANGE(appPtr->uiPtr->widgets.gain)),
-					 "value_changed", G_CALLBACK(update_gain), &appPtr->streamerPtr->camParams);
-	g_signal_connect(gtk_range_get_adjustment(GTK_RANGE(appPtr->uiPtr->widgets.exp)),
-					 "value_changed", G_CALLBACK(update_exposure), &appPtr->streamerPtr->camParams);
 	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.x0)),
 					 "value_changed", G_CALLBACK(update_x0), &appPtr->streamerPtr->camParams);
 	g_signal_connect(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.y0)),
@@ -338,8 +304,74 @@ bool lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_in
 					 "delete_event", G_CALLBACK(close_cb), 
 					 appPtr->streamerPtr);
 
+	return TRUE;
+}
 
-    return true;
+
+gboolean lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(
+	LirenaCaptureApp * appPtr)
+{
+    //register handlers
+
+
+	// // some kind of hack to force ANOTHER callback to be called early:
+	// // init the cam and  start the captureThread! 
+	// // instead of calling this functionality directly...
+	// // 
+	// // cb is irrelevant for non-GUI mode.
+	// // ximea dev's comment :
+	// // "only way I found to make sure window is displayed right away"
+	// gdk_threads_add_timeout(100, 
+	// 	(GSourceFunc)lirenaCaptureGUI_WEIRDcb__opCam_setupCamPrms_updWidgs_startCapThrd, 
+	// 	(gpointer)appPtr); 
+
+	// above awkward timeout func expands to direct calls:
+
+	// open cam
+	lirenaCaptureGUI_openCam(appPtr);
+	//init cam
+	lirenaCaptureGUI_setupCamParams(appPtr);
+	// adapt GUI widgets to cam params
+	lirenaCaptureGUI_updateWidgets(appPtr);
+	//start acquisition
+	lirenaCaptureGUI_startCaptureThread(appPtr);
+
+
+	// // button sensitivity callback: irrelevant for non-GUI mode
+	// // another hack of the above kind: 
+	// // instead of calling the functions directly on program start,
+	// //  there is some messing around with timeouts and callbacks
+	// // and of course the camera itself  0o.
+	// // TODO detangle this stuff!!
+	// gdk_threads_add_timeout(1000, 
+    //     (GSourceFunc)lirenaCaptureGUI_queryGPIlevels_updateWidgets,
+    //     (gpointer)appPtr);
+
+	// above awkward timeout func expands to direct calls:
+
+	lirenaCaptureGUI_queryGPIlevels(appPtr);
+
+	lirenaCaptureGUI_updateGPIWidgets(appPtr);
+
+
+
+	// "actual callbacks" only beginning here: --------------------------
+
+
+	//this callback has important functionality that is also required without GUI
+	//g_signal_connect(appPtr->uiPtr->widgets.run, "toggled",
+	//				 G_CALLBACK(lirenaCaptureGUI_openCam_setupCam_updateGUI_startCaptureThread), (gpointer)appPtr); 
+
+	// g_signal_connect(appPtr->uiPtr->widgets.raw, "toggled",
+	// 				 G_CALLBACK(lirenaCaptureGUI_setupCamParams_updateWidgets), 
+	// 				 (gpointer)appPtr);
+
+
+	lirenaCaptureGUI_setupCallbacks(appPtr);
+
+
+
+    return TRUE;
 }
 
 
@@ -406,9 +438,12 @@ gboolean lirenaCaptureGUI_startCaptureThread(
 
 
 gboolean lirenaCaptureGUI_setupCamParams(
-    bool raw,
     LirenaCaptureApp* appPtr)
 {
+	// relict of oold code: we now only take raw stuff,
+	// as the software debayering from ximea is awfully slow
+	bool raw = true;
+
 	LirenaXimeaStreamer_CameraParams * camParamsPtr = 
 			&appPtr->streamerPtr->camParams;
 
@@ -531,8 +566,20 @@ gboolean lirenaCaptureGUI_updateWidgets(
 // Everything below seems irrelevant for non-GUI mode
 
 
-//lirenaCaptureDisplayController_initCamButtonSensitivity
-gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(LirenaCaptureApp *appPtr)
+//lirenaCaptureGUI_queryGPIlevels_updateWidgets
+gboolean lirenaCaptureGUI_queryGPIlevels_updateWidgets(LirenaCaptureApp *appPtr)
+{
+	lirenaCaptureGUI_queryGPIlevels(appPtr);
+
+	lirenaCaptureGUI_updateGPIWidgets(appPtr);
+
+	return TRUE;
+}
+
+
+
+gboolean lirenaCaptureGUI_queryGPIlevels(
+    LirenaCaptureApp* appPtr)
 {
 	// TODO adapt this to the cam mode we actually use, consult
 	// https://www.ximea.com/support/wiki/apis/xiapi_manual#XI_PRM_GPI_SELECTOR-or-gpi_selector
@@ -563,23 +610,25 @@ gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(LirenaCaptureAp
 				GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi_levels[i]), 
 				appPtr->streamerPtr->camParams.gpi_levels[i]);
 		}
-
-		// xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 2);
-		// xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		// gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi2), level);
-		// xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 3);
-		// xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		// gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi3), level);
-		// xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 4);
-		// xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
-		// gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi4), level);
-
 	}
 
-	// gtk_toggle_button_set_inconsistent(
-	// 	GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.run),
-	// 	gtk_toggle_button_get_active(
-	// 		GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.run)) != appPtr->streamerPtr->doAcquireFrames);
+	return TRUE;
+}
+
+gboolean lirenaCaptureGUI_updateGPIWidgets(
+    LirenaCaptureApp* appPtr)
+{
+	if (appPtr->streamerPtr->doAcquireFrames &&
+	    appPtr->streamerPtr->camParams.cameraHandle != INVALID_HANDLE_VALUE)
+	{
+		for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
+		{
+			gtk_toggle_button_set_active(
+				GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi_levels[i]), 
+				appPtr->streamerPtr->camParams.gpi_levels[i]);
+		}
+
+	}
 
 	gtk_widget_set_sensitive(appPtr->uiPtr->widgets.boxx, appPtr->streamerPtr->doAcquireFrames);
 	gtk_widget_set_sensitive(appPtr->uiPtr->widgets.boxy, appPtr->streamerPtr->doAcquireFrames);
@@ -597,19 +646,15 @@ gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(LirenaCaptureAp
 
 
 
-
-
-
-
-
-gboolean lirenaCaptureDisplayController_startHack_cb(LirenaCaptureApp *appPtr)
+//lirenaCaptureGUI_WEIRDcb__opCam_setupCamPrms_updWidgs_startCapThrd
+gboolean lirenaCaptureGUI_WEIRDcb__opCam_setupCamPrms_updWidgs_startCapThrd(LirenaCaptureApp *appPtr)
 {
 
 	// open cam
 	lirenaCaptureGUI_openCam(appPtr);
 
 	//init cam
-	lirenaCaptureGUI_setupCamParams(true, appPtr);
+	lirenaCaptureGUI_setupCamParams(appPtr);
 
 	// adapt GUI widgets to cam params
 	lirenaCaptureGUI_updateWidgets(appPtr);

@@ -217,13 +217,13 @@ struct LirenaXimeaStreamer_CameraParams;
 // function interface ----------------------------------------------------------
 
 //{ init GUI stuff 
-bool lirenaCaptureGUI_createWidgets(
+gboolean lirenaCaptureGUI_createWidgets(
     LirenaCaptureUI *dispCtrl);
 
 // register callbacks   
 // (and do some awkward cam-init-stuff in timeouted callbacks
 //   that does NOT belong there...)
-bool lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(
+gboolean lirenaCaptureDisplayController_initCam_startCaptureThread_setupCallbacks_initWidgets(
     LirenaCaptureApp * appPtr);
 //}
 
@@ -236,18 +236,43 @@ gboolean lirenaCaptureGUI_openCam(
 
 
 gboolean lirenaCaptureGUI_setupCamParams(
-    bool raw,
     LirenaCaptureApp* appPtr);
+gboolean lirenaCaptureGUI_queryGPIlevels(
+    LirenaCaptureApp* app);
 
 gboolean lirenaCaptureGUI_updateWidgets(
     LirenaCaptureApp* appPtr);
+gboolean lirenaCaptureGUI_updateGPIWidgets(
+    LirenaCaptureApp* app);
+
+gboolean lirenaCaptureGUI_setupCallbacks(LirenaCaptureApp * appPtr);
+
 
 gboolean lirenaCaptureGUI_startCaptureThread(
 	LirenaCaptureApp *appPtr);
 
 
+
+
+
 //-----------------------------------------------------------------------------
 // Everything below seems irrelevant for non-GUI mode
+
+gboolean close_cb(GtkWidget*, GdkEvent*,  
+	LirenaStreamer* streamerPtr);
+
+
+//following only widget-to-cam-param stuff ------------------------------------
+//gboolean update_show(GtkToggleButton *show,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_gain(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_exposure(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_cy(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_cx(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_y0(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
+gboolean update_x0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams* cam);
+
+
+
 
 
 //{ stuff to bind GStreamer renderings to an X/GDK/GTK window
@@ -261,35 +286,20 @@ void video_widget_realize_cb(GtkWidget *widget,
 
 
 // button sensitivity callback: irrelevant for non-GUI mode
-gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(
+gboolean lirenaCaptureGUI_quieryGPIlevels_updateWidgets(
     LirenaCaptureApp* app);
+
+
 
 // some kind of hack to force ANOTHER callback to be called early...
 // ... don't understand the details (MS)
 // is irrelevant for non-GUI mode
-gboolean lirenaCaptureDisplayController_startHack_cb(
+gboolean lirenaCaptureGUI_WEIRDcb__opCam_setupCamPrms_updWidgs_startCapThrd(
     LirenaCaptureApp* appPtr);
 
 
 
-gboolean close_cb(GtkWidget*, GdkEvent*,  
-    //hack: need to be g_malloc'ed, then is g_free'd at and of callback.
-	LirenaStreamer* streamerPtr);
 
-
-
-
-
-
-
-//following only widget-to-cam-param stuff ------------------------------------
-//gboolean update_show(GtkToggleButton *show,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_gain(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_exposure(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_cy(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_cx(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_y0(GtkAdjustment *adj,  LirenaXimeaStreamer_CameraParams* cam); //gpointer)
-gboolean update_x0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams* cam);
 
 
 
