@@ -388,77 +388,85 @@ gboolean lirenaCaptureDisplayController_setupCamParams(
 	LirenaCaptureApp *appPtr)
 {
 
-	HANDLE cameraHandle = appPtr->streamerPtr->camParams.cameraHandle;
+	LirenaXimeaStreamer_CameraParams * camParamsPtr = 
+			&appPtr->streamerPtr->camParams;
 
-	float mingain = 0.0f;
-	float maxgain = 0.0f;
-	float midgain = 0.0f;
-
-	if (cameraHandle != INVALID_HANDLE_VALUE)
+	
+	if (camParamsPtr->cameraHandle != INVALID_HANDLE_VALUE)
 	{
 		// query intrinsic device params
 
-		xiSetParamInt(cameraHandle, XI_PRM_IMAGE_DATA_FORMAT, 
+		xiSetParamInt(camParamsPtr->cameraHandle, 
+			XI_PRM_IMAGE_DATA_FORMAT, 
 			// gtk_toggle_button_get_active(raw) 
 			raw ? XI_RAW8 : XI_RGB32);
-		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
-		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
-		xiGetParamInt(cameraHandle, XI_PRM_WIDTH XI_PRM_INFO_MAX, &appPtr->streamerPtr->camParams.maxcx);
-		xiGetParamInt(cameraHandle, XI_PRM_HEIGHT XI_PRM_INFO_MAX, &appPtr->streamerPtr->camParams.maxcy);
-		int isColor = 0;
-		xiGetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_IMAGE_IS_COLOR, &isColor);
+		xiGetParamFloat(camParamsPtr->cameraHandle, 
+			XI_PRM_GAIN XI_PRM_INFO_MIN, &camParamsPtr->mingain);
+		xiGetParamFloat(camParamsPtr->cameraHandle, 
+			XI_PRM_GAIN XI_PRM_INFO_MAX, &camParamsPtr->maxgain);
+		xiGetParamInt(camParamsPtr->cameraHandle, 
+			XI_PRM_WIDTH XI_PRM_INFO_MAX, &camParamsPtr->maxcx);
+		xiGetParamInt(camParamsPtr->cameraHandle, 
+			XI_PRM_HEIGHT XI_PRM_INFO_MAX, &camParamsPtr->maxcy);
+
+		xiGetParamInt(camParamsPtr->cameraHandle, XI_PRM_IMAGE_IS_COLOR, &camParamsPtr->isColor);
 
 		// derive extrinsic device params
-		appPtr->streamerPtr->camParams.roicx = appPtr->streamerPtr->camParams.maxcx;
-		appPtr->streamerPtr->camParams.roicy = appPtr->streamerPtr->camParams.maxcy;
-		appPtr->streamerPtr->camParams.roix0 = 0;
-		appPtr->streamerPtr->camParams.roiy0 = 0;
+		camParamsPtr->roicx = camParamsPtr->maxcx;
+		camParamsPtr->roicy = camParamsPtr->maxcy;
+		camParamsPtr->roix0 = 0;
+		camParamsPtr->roiy0 = 0;
 
-		midgain = (maxgain + mingain) * 0.5f;
+		//intermediate value: take middle until TODO make configurable
+		camParamsPtr->gainToUse = (camParamsPtr->maxgain + camParamsPtr->mingain) * 0.5f;
 
 
 		// assign extrinsic device params
-		xiSetParamFloat(cameraHandle, XI_PRM_GAIN, midgain);
-		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_X, appPtr->streamerPtr->camParams.roix0);
-		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_Y, appPtr->streamerPtr->camParams.roiy0);
-		xiSetParamInt(cameraHandle, XI_PRM_WIDTH,    appPtr->streamerPtr->camParams.roicx);
-		xiSetParamInt(cameraHandle, XI_PRM_HEIGHT, appPtr->streamerPtr->camParams.roicy);
+		xiSetParamFloat(camParamsPtr->cameraHandle , XI_PRM_GAIN, camParamsPtr->gainToUse);
+		xiSetParamInt(camParamsPtr->cameraHandle , XI_PRM_OFFSET_X, camParamsPtr->roix0);
+		xiSetParamInt(camParamsPtr->cameraHandle , XI_PRM_OFFSET_Y, camParamsPtr->roiy0);
+		xiSetParamInt(camParamsPtr->cameraHandle , XI_PRM_WIDTH,    camParamsPtr->roicx);
+		xiSetParamInt(camParamsPtr->cameraHandle , XI_PRM_HEIGHT,   camParamsPtr->roicy);
 		
-		if (isColor)
+		if (camParamsPtr->isColor)
 		{
-			xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_AUTO_WB, 1);
+			xiSetParamInt(camParamsPtr->cameraHandle, XI_PRM_AUTO_WB, 1);
 		}
 
 		// set exposure from CLI arg
-		xiSetParamInt(appPtr->streamerPtr->camParams.cameraHandle, XI_PRM_EXPOSURE, 
+		xiSetParamInt(camParamsPtr->cameraHandle, XI_PRM_EXPOSURE, 
 			1000 * appPtr->configPtr->ximeaparams.exposure_ms);
 	}
 
 
 
-	if (cameraHandle != INVALID_HANDLE_VALUE)
+	if (camParamsPtr->cameraHandle  != INVALID_HANDLE_VALUE)
 	{
 		LirenaXimeaCaptureWidgets *widgets = &appPtr->uiPtr->widgets;
 
 		//adapt GUI widgets
-		gtk_adjustment_configure(gtk_range_get_adjustment(GTK_RANGE(widgets->gain)),
-			midgain, mingain, maxgain, 0.1, 1, 0);
+		gtk_adjustment_configure(
+			gtk_range_get_adjustment(GTK_RANGE(widgets->gain)),
+			camParamsPtr->gainToUse, 
+			camParamsPtr->mingain, 
+			camParamsPtr->maxgain, 
+			0.1, 1, 0);
 		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(widgets->x0)), 
-			appPtr->streamerPtr->camParams.roix0, 
-			0, appPtr->streamerPtr->camParams.maxcx - 4, 2, 20, 0);
+			camParamsPtr->roix0, 
+			0, camParamsPtr->maxcx - 4, 2, 20, 0);
 		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(widgets->y0)), 
-			appPtr->streamerPtr->camParams.roiy0, 0, 
-			appPtr->streamerPtr->camParams.maxcy - 2, 2, 20, 0);
+			camParamsPtr->roiy0, 0, 
+			camParamsPtr->maxcy - 2, 2, 20, 0);
 		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(widgets->cx)), 
-			appPtr->streamerPtr->camParams.roicx, 4,
-			appPtr->streamerPtr->camParams.maxcx, 4, 20, 0);
+			camParamsPtr->roicx, 4,
+			camParamsPtr->maxcx, 4, 20, 0);
 		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
 			GTK_SPIN_BUTTON(widgets->cy)), 
-			appPtr->streamerPtr->camParams.roicy, 2, 
-			appPtr->streamerPtr->camParams.maxcy, 2, 20, 0);
+			camParamsPtr->roicy, 2, 
+			camParamsPtr->maxcy, 2, 20, 0);
 
 		gtk_adjustment_set_value(
 			gtk_range_get_adjustment(GTK_RANGE(widgets->exp)),

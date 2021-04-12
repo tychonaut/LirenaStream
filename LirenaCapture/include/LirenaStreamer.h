@@ -46,7 +46,28 @@ struct LirenaXimeaStreamer_CameraParams
 
 	//cropping data, currently unused 
 	//(test cam doesn't seem to support)
-	int maxcx, maxcy, roix0, roiy0, roicx, roicy;
+	int maxcx = 0;
+	int maxcy = 0;
+
+	int roix0 = 0;
+	int roiy0 = 0;
+
+	int roicx = 0;
+	int roicy = 0;
+
+	float mingain = 0.0f;
+	float maxgain = 0.0f;
+	
+	int isColor = 0;
+
+	// milliseconds;
+	// read from config
+	int exposureToUse_ms = 30;
+
+	// intemediate derived value
+	// TODO make CLI-configurable
+	float gainToUse = 0.0f;
+	
 };
 
 
@@ -150,7 +171,7 @@ class LirenaStreamer
 
 
 		bool setupCaptureDevice();
-		
+
 		bool setupGStreamerPipeline();
 
 		bool launchCaptureThread();
