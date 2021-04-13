@@ -214,7 +214,30 @@ LirenaConfig::LirenaConfig(int argc, char **argv)
       this->haveLocalGUI = false;
     }
 
-    // dlgofxytec
+
+    // printf(
+		// 		//0123456789ABCDEF
+    //     "0123456789ABCDE\n"
+		// 		"Acquisition: [ \n"
+		// 		"frames captr'd:\n"
+		// 		"%015lu\n"
+		// 		"frames skipped:\n"
+		// 		"%015lu\n"
+		// 		"PTS  timestamp:\n"
+		// 		"%015lu\n"
+		// 		"abs. timestamp:\n"
+		// 		"%015lu\n"
+		// 		"fps:           \n"
+		// 		"%015.2f\n"
+		// 		"]              \n",
+		// 		(long unsigned int) 1337,
+		// 		(long unsigned int) 42,
+		// 		(long unsigned int) 156106566136,
+		// 		(long unsigned int) 133133133,
+		// 		10.12345f);
+
+
+    // dlngofxytec
     printf ("IP = %s\n"
             "Port = %s\n"
             "Capture device type: %s\n"
@@ -257,5 +280,9 @@ LirenaConfig::LirenaConfig(int argc, char **argv)
             this->ximeaparams.exposure_ms,
             this->ximeaparams.useCudaDemosaic ? "yes" : "no"
     );
+
+
+
+
 }
 

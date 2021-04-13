@@ -150,7 +150,18 @@ class LirenaCaptureUI
 
 
 
-    //TODO outsource to GUI subclass
+    //TODO outsource rest  to GUI subclass
+
+        // ideosyncratic decision (in hope to reduce complexity later)
+        // if just display locally, widout GUI widgets, 
+        //  then just let xvimagesink do its job and stop
+        //  messing with caps filter and image sizes!
+        //  NO local display and NO GUI --> false
+        //  DO local display but NO GUI --> false
+        //  NO local display but HAVE some buttons -> false
+        //  DO local display and HAVE GUI --> true
+        bool doMaintainOwnVideoWindow();
+
         //useful for all GUI instances
 	    guintptr drawableWindow_handle = 0;
         //TODO rename to  outsource to subclass

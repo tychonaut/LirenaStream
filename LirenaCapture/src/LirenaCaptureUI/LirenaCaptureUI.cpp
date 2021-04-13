@@ -40,6 +40,30 @@ LirenaCaptureUI* LirenaCaptureUI::createInstance(LirenaStreamer* streamerPtr)
 	g_assert(0 && "TODO implement GUI, network UI for ximea and magewell;"
 		"Also think about design of this diff: mutiple UI classes or a generic "
 		"device interface?");
+	/*
+		pseudocode:
+
+		if(havelocalGUI || showLocalVideo)
+		{
+			if(devType = Ximea)
+			{
+				return new XimeaGUI
+			}
+			else
+			{
+				error cause magewell/videotestsrc GUI not supported yet
+				exit(1);
+			}
+		}
+		else
+		{
+			// return base UI class, implementing only a gmainloop 
+			//  without any bus listeners
+			return LirenaCaptureUI 
+		}
+	*/
+
+
 	return nullptr;
 }
 
@@ -114,14 +138,13 @@ bool LirenaCaptureUI::shutdownUI()
 }
 
 
+bool LirenaCaptureUI::doMaintainOwnVideoWindow()
+{
+	bool doDisplayVideoLocally = streamerPtr->configPtr->doLocalDisplay;
+	bool haveLocalGUI = streamerPtr->configPtr->haveLocalGUI;
 
-
-
-
-
-
-
-
+	return (doDisplayVideoLocally && haveLocalGUI);
+}
 
 
 //-----------------------------------------------------------------------------
