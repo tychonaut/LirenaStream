@@ -150,7 +150,10 @@ class LirenaCaptureUI
 
 
 
-    //TODO outsource rest  to GUI subclass
+    //TODO outsource rest  to GUI subclass ---
+
+        //TODO rename to  outsource to subclass
+	    LirenaXimeaCaptureWidgets widgets;
 
         // ideosyncratic decision (in hope to reduce complexity later)
         // if just display locally, widout GUI widgets, 
@@ -162,10 +165,28 @@ class LirenaCaptureUI
         //  DO local display and HAVE GUI --> true
         bool doMaintainOwnVideoWindow();
 
+		// create new window for video rendering,
+        // setup callbacks to associate X window handle
+        // with gstreamer
+		// n.b. this is also possible WITHOUT GUI! if will need GTK, though
+        bool optionallyCreateSelfManagedVideoWindow();
+
+        //to be called from capture thread
+        bool optionallyBindSelfManagedVideoWindowToGStreamer(
+	        GstElement *pipeline);
+        //to be called from capture thread
+        bool optionallyAdaptSelfManagedVideoWindowSizeAndScaling(
+            GstElement *pipeline,
+            int newWid,
+	        int newHei);
+
         //useful for all GUI instances
 	    guintptr drawableWindow_handle = 0;
-        //TODO rename to  outsource to subclass
-	    LirenaXimeaCaptureWidgets widgets;
+       
+       	//{ used for "manage own window"
+	    int maxVideoWindowWidth = 1000;
+	    int maxVideoWindowHeight = 1000;
+	    //}
 
 };
 
@@ -200,6 +221,10 @@ class LirenaCaptureXimeaGUI : public LirenaCaptureUI
         virtual bool exitMainLoop();
 
         virtual bool shutdownUI();//{return true;}
+
+
+    private:
+        bool initWidgets();
 };
 
 
@@ -228,9 +253,6 @@ struct LirenaXimeaStreamer_CameraParams;
 // function interface ----------------------------------------------------------
 
 //{ init GUI stuff 
-gboolean lirenaCaptureXimeaGUI_createWidgets(
-    LirenaCaptureUI *dispCtrl);
-
 
 
 gboolean lirenaXimeaCaptureDevice_openCam(
@@ -247,8 +269,8 @@ gboolean lirenaCaptureXimeaGUI_updateWidgets(
 gboolean lirenaCaptureGUI_setupCallbacks(LirenaCaptureApp * appPtr);
 
 
-gboolean lirenaStreamer_startCaptureThread(
-	LirenaCaptureApp *appPtr);
+// gboolean lirenaStreamer_startCaptureThread(
+// 	LirenaCaptureApp *appPtr);
 
 
 
@@ -259,7 +281,7 @@ gboolean lirenaStreamer_startCaptureThread(
 
 //lirenaCaptureXimeaGUI_cb_closeWindow
 gboolean LirenaCaptureXimeaGUI_cb_closeWindow(GtkWidget*, GdkEvent*,  
-	LirenaStreamer* streamerPtr);
+	LirenaCaptureUI * uiPtr);
 
 //following only widget-to-cam-param stuff ------------------------------------
 //lirenaCaptureXimeaGUI_cb_updateGain

@@ -146,6 +146,110 @@ bool LirenaCaptureUI::doMaintainOwnVideoWindow()
 	return (doDisplayVideoLocally && haveLocalGUI);
 }
 
+bool LirenaCaptureUI::optionallyCreateSelfManagedVideoWindow()
+{
+	if(doMaintainOwnVideoWindow())
+	{
+		gdk_threads_enter();
+
+		widgets.videoWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+
+		gtk_window_set_title(
+			GTK_WINDOW(widgets.videoWindow), "LirenaCapture local display");
+		gtk_widget_set_double_buffered(
+			widgets.videoWindow, FALSE);
+
+		// W-Window-handle-getter, to be paased to Gstreamer later
+		g_signal_connect(widgets.videoWindow,
+						"realize", 
+						G_CALLBACK(lirenaCaptureXimeaGUI_cb_grabXhandleForVidWindow), 
+						this);
+
+		g_signal_connect(widgets.videoWindow,
+						"delete-event", G_CALLBACK(LirenaCaptureXimeaGUI_cb_closeWindow),
+						this);
+
+		gtk_widget_show_all(widgets.videoWindow);
+		//TODO find out if nececcary, and if yes in what order wrt. gtk_widget_show_all
+		gtk_widget_realize(widgets.videoWindow);
+
+		widgets.screen = gdk_screen_get_default();
+
+		maxVideoWindowWidth = 0.8 * gdk_screen_get_width(widgets.screen);
+		maxVideoWindowHeight = 0.8 * gdk_screen_get_width(widgets.screen);
+
+		gdk_threads_leave();
+	}
+
+	return true;
+}
+
+
+bool LirenaCaptureUI::optionallyBindSelfManagedVideoWindowToGStreamer(
+	GstElement *pipeline)
+{
+	if(doMaintainOwnVideoWindow())
+	{
+		GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
+		gst_bus_set_sync_handler(
+			bus, 
+			(GstBusSyncHandler)lirenaCaptureXimeaGUI_cb_handleBusSyncEvent,
+			this,
+			NULL);
+		gst_object_unref(bus);
+	}
+
+	return true;
+}
+
+
+bool LirenaCaptureUI::optionallyAdaptSelfManagedVideoWindowSizeAndScaling(
+	 GstElement *pipeline,
+	 int newWid,
+	 int newHei)
+ {
+	 GstElement *scale_element = 0;
+	 GstCaps *size_caps = 0;
+	 scale_element = gst_bin_get_by_name(GST_BIN(pipeline), "scale_element");
+
+
+	 while (newWid > maxVideoWindowWidth || newHei > maxVideoWindowHeight)
+	 {
+		 newWid /= 2;
+		 newHei /= 2;
+	 }
+
+	 if (size_caps)
+	 {
+		 gst_caps_unref(size_caps);
+	 }
+
+	 size_caps =
+		 gst_caps_new_simple(
+			 "video/x-raw",
+			 "width", G_TYPE_INT, newWid,
+			 "height", G_TYPE_INT, newHei,
+			 NULL);
+
+	 g_object_set(G_OBJECT(scale_element), "caps", size_caps, NULL);
+
+	 gst_object_unref(scale_element);
+
+	 //free ref from local scope:
+	 if (size_caps)
+	 {
+		 gst_caps_unref(size_caps);
+	 }
+
+	 gdk_threads_enter();
+	 gtk_window_resize(
+		 GTK_WINDOW(widgets.videoWindow),
+		 newWid, newHei);
+	 gdk_threads_leave();
+
+	 return true;
+ }
+
 
 //-----------------------------------------------------------------------------
 LirenaCaptureXimeaGUI::LirenaCaptureXimeaGUI(LirenaStreamer* streamerPtr)
@@ -164,12 +268,160 @@ bool LirenaCaptureXimeaGUI::setupUI()
 {
 	gdk_threads_enter();
 	
-	GST_ERROR("LirenaCaptureXimeaGUI::setupUI(): TODO IMPLEMENT");
-	return false;
+	//create widgets
+	this->widgets.controlWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	this->widgets.boxmain = gtk_vbox_new(FALSE, 0);
+	this->widgets.boxgpi = gtk_hbox_new(TRUE, 0);
+	this->widgets.boxx = gtk_hbox_new(FALSE, 0);
+	this->widgets.boxy = gtk_hbox_new(FALSE, 0);
+	this->widgets.labelexp = gtk_label_new("Exposure (ms)");
+	this->widgets.labelgain = gtk_label_new("Gain (dB)");
+	this->widgets.labelx0 = gtk_label_new("x0");
+	this->widgets.labelcx = gtk_label_new("cx");
+	this->widgets.labely0 = gtk_label_new("y0");
+	this->widgets.labelcy = gtk_label_new("cy");
+
+	for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
+	{
+		const int maxSize=256;
+		gchar label[maxSize];
+		//std::string()
+		g_snprintf(label,
+			   (gulong)maxSize,
+			   "%s%i", "GPI", i);
+
+		this->widgets.gpi_levels[i] =
+			gtk_check_button_new_with_label(label);
+	}
+	// this->widgets.gpi1 = gtk_check_button_new_with_label("GPI1");
+	// this->widgets.gpi2 = gtk_check_button_new_with_label("GPI2");
+	// this->widgets.gpi3 = gtk_check_button_new_with_label("GPI3");
+	// this->widgets.gpi4 = gtk_check_button_new_with_label("GPI4");
+
+	this->widgets.exp = gtk_hscale_new_with_range(1, 1000, 1);
+	this->widgets.gain = gtk_hscale_new_with_range(0, 1, 0.1);	 //use dummy limits
+	this->widgets.x0 = gtk_spin_button_new_with_range(0, 128, 2); //use dummy max limit
+	this->widgets.y0 = gtk_spin_button_new_with_range(0, 128, 2); //use dummy max limit
+	this->widgets.cx = gtk_spin_button_new_with_range(4, 128, 4); //use dummy max limit
+	this->widgets.cy = gtk_spin_button_new_with_range(2, 128, 2); //use dummy max limit
+	//this->widgets.raw = gtk_toggle_button_new_with_label("Display RAW data");
+	//this->widgets.show = gtk_toggle_button_new_with_label("Live view");
+	//this->widgets.run = gtk_toggle_button_new_with_label("Acquisition");
+	//tune them
+	gtk_window_set_title(GTK_WINDOW(this->widgets.controlWindow), "capture control");
+	gtk_window_set_keep_above(GTK_WINDOW(this->widgets.controlWindow), TRUE);
+	//gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(this->widgets.raw), TRUE);
+	//gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(this->widgets.show), TRUE);
+	//gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(this->widgets.run), TRUE); //actual start is delayed by 100ms, see below
+	gtk_widget_set_sensitive(this->widgets.boxgpi, FALSE);
+	gtk_scale_set_digits(GTK_SCALE(this->widgets.exp), 0);
+	gtk_range_set_update_policy(GTK_RANGE(this->widgets.exp), GTK_UPDATE_DISCONTINUOUS);
+	gtk_range_set_update_policy(GTK_RANGE(this->widgets.gain), GTK_UPDATE_DISCONTINUOUS);
+	gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(this->widgets.exp)), 10);
+	gtk_scale_set_value_pos(GTK_SCALE(this->widgets.exp), GTK_POS_RIGHT);
+	gtk_scale_set_value_pos(GTK_SCALE(this->widgets.gain), GTK_POS_RIGHT);
+	gtk_widget_set_sensitive(this->widgets.boxx, FALSE);
+	gtk_widget_set_sensitive(this->widgets.boxy, FALSE);
+	gtk_widget_set_sensitive(this->widgets.exp, FALSE);
+	gtk_widget_set_sensitive(this->widgets.gain, FALSE);
+	//pack everything into window
+
+	for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
+	{
+		gtk_container_add(
+			GTK_CONTAINER(this->widgets.boxgpi), 
+			this->widgets.gpi_levels[i]);
+	}
+
+
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxmain), this->widgets.boxgpi);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxx), this->widgets.labelx0);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxx), this->widgets.x0);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxy), this->widgets.labely0);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxy), this->widgets.y0);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxx), this->widgets.labelcx);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxx), this->widgets.cx);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxy), this->widgets.cy);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxmain), this->widgets.boxx);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxmain), this->widgets.boxy);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxmain), this->widgets.labelexp);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxmain), this->widgets.exp);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxmain), this->widgets.labelgain);
+	gtk_container_add(GTK_CONTAINER(this->widgets.boxmain), this->widgets.gain);
+
+
+	gtk_container_add(GTK_CONTAINER(this->widgets.controlWindow), this->widgets.boxmain);
 
 	gdk_threads_leave();
+
+	// populate widgets with "values" from cam
+	initWidgets();
+
+	optionallyCreateSelfManagedVideoWindow();
+
+
+	return true;
 }
 
+
+
+bool LirenaCaptureXimeaGUI::initWidgets()
+{
+	LirenaXimeaStreamer_CameraParams * camParamsPtr = 
+			&streamerPtr->camParams;
+
+	//adapt GUI widgets
+	if (camParamsPtr->cameraHandle  != INVALID_HANDLE_VALUE)
+	{
+		gtk_adjustment_configure(
+			gtk_range_get_adjustment(GTK_RANGE(widgets.gain)),
+			camParamsPtr->gainToUse, 
+			camParamsPtr->mingain, 
+			camParamsPtr->maxgain, 
+			0.1, 1, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(widgets.x0)), 
+			camParamsPtr->roix0, 
+			0, camParamsPtr->maxcx - 4, 2, 20, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(widgets.y0)), 
+			camParamsPtr->roiy0, 0, 
+			camParamsPtr->maxcy - 2, 2, 20, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(widgets.cx)), 
+			camParamsPtr->roicx, 4,
+			camParamsPtr->maxcx, 4, 20, 0);
+		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
+			GTK_SPIN_BUTTON(widgets.cy)), 
+			camParamsPtr->roicy, 2, 
+			camParamsPtr->maxcy, 2, 20, 0);
+
+		gtk_adjustment_set_value(
+			gtk_range_get_adjustment(GTK_RANGE(widgets.exp)),
+			streamerPtr->configPtr->ximeaparams.exposure_ms);
+
+
+		g_assert(streamerPtr->doAcquireFrames && 
+			"should be true all the time in this minimal setup");
+		streamerPtr->doAcquireFrames = true; 
+
+		gtk_widget_set_sensitive(widgets.boxx, streamerPtr->doAcquireFrames);
+		gtk_widget_set_sensitive(widgets.boxy, streamerPtr->doAcquireFrames);
+		gtk_widget_set_sensitive(widgets.exp, streamerPtr->doAcquireFrames);
+		gtk_widget_set_sensitive(widgets.gain, streamerPtr->doAcquireFrames);
+	
+		//GPI stuff; TODO understand this ...
+		for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
+		{
+			gtk_toggle_button_set_active(
+				GTK_TOGGLE_BUTTON(widgets.gpi_levels[i]), 
+				streamerPtr->camParams.gpi_levels[i]);
+		}
+		//} end GPI stuff
+	}
+
+	return true;
+}
 
 bool LirenaCaptureXimeaGUI::setupCallbacks()
 {
@@ -224,7 +476,7 @@ bool LirenaCaptureXimeaGUI::setupCallbacks()
 		widgets.controlWindow,
 		"delete_event", 
 		G_CALLBACK(LirenaCaptureXimeaGUI_cb_closeWindow),
-		streamerPtr);
+		this);
 
 	//g_signal_connect(
 	//	widgets.show,
@@ -246,7 +498,7 @@ bool LirenaCaptureXimeaGUI::setupCallbacks()
 	//show GUI windows
 	gtk_widget_show_all(widgets.controlWindow);
 	//TODO find out if nececcary, and if yes in what order wrt. gtk_widget_show_all
-	//gtk_widget_realize(appPtr->uiPtr->widgets.controlWindow);
+	//gtk_widget_realize(widgets.controlWindow);
 
 
 	//start the GUI main loop
@@ -264,7 +516,7 @@ bool LirenaCaptureXimeaGUI::setupCallbacks()
 
 	// don't bother with window destruction, just shut down GTK
 	// the dirty way
-	//gtk_widget_destroy(appPtr->uiPtr->widgets.videoWindow);
+	//gtk_widget_destroy(widgets.videoWindow);
 		
 	gtk_main_quit();
 
@@ -288,154 +540,6 @@ bool LirenaCaptureXimeaGUI::shutdownUI()
 //-----------------------------------------------------------------------------
 
 
-//lirenaCaptureXimeaGUI_createWidgets
-gboolean lirenaCaptureXimeaGUI_createWidgets(LirenaCaptureUI *dispCtrl)
-{
-	//create widgets
-	dispCtrl->widgets.controlWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-	dispCtrl->widgets.boxmain = gtk_vbox_new(FALSE, 0);
-	dispCtrl->widgets.boxgpi = gtk_hbox_new(TRUE, 0);
-	dispCtrl->widgets.boxx = gtk_hbox_new(FALSE, 0);
-	dispCtrl->widgets.boxy = gtk_hbox_new(FALSE, 0);
-	dispCtrl->widgets.labelexp = gtk_label_new("Exposure (ms)");
-	dispCtrl->widgets.labelgain = gtk_label_new("Gain (dB)");
-	dispCtrl->widgets.labelx0 = gtk_label_new("x0");
-	dispCtrl->widgets.labelcx = gtk_label_new("cx");
-	dispCtrl->widgets.labely0 = gtk_label_new("y0");
-	dispCtrl->widgets.labelcy = gtk_label_new("cy");
-
-	for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
-	{
-		const int maxSize=256;
-		gchar label[maxSize];
-		//std::string()
-		g_snprintf(label,
-			   (gulong)maxSize,
-			   "%s%i", "GPI", i);
-
-		dispCtrl->widgets.gpi_levels[i] =
-			gtk_check_button_new_with_label(label);
-	}
-	// dispCtrl->widgets.gpi1 = gtk_check_button_new_with_label("GPI1");
-	// dispCtrl->widgets.gpi2 = gtk_check_button_new_with_label("GPI2");
-	// dispCtrl->widgets.gpi3 = gtk_check_button_new_with_label("GPI3");
-	// dispCtrl->widgets.gpi4 = gtk_check_button_new_with_label("GPI4");
-
-	dispCtrl->widgets.exp = gtk_hscale_new_with_range(1, 1000, 1);
-	dispCtrl->widgets.gain = gtk_hscale_new_with_range(0, 1, 0.1);	 //use dummy limits
-	dispCtrl->widgets.x0 = gtk_spin_button_new_with_range(0, 128, 2); //use dummy max limit
-	dispCtrl->widgets.y0 = gtk_spin_button_new_with_range(0, 128, 2); //use dummy max limit
-	dispCtrl->widgets.cx = gtk_spin_button_new_with_range(4, 128, 4); //use dummy max limit
-	dispCtrl->widgets.cy = gtk_spin_button_new_with_range(2, 128, 2); //use dummy max limit
-	//dispCtrl->widgets.raw = gtk_toggle_button_new_with_label("Display RAW data");
-	//dispCtrl->widgets.show = gtk_toggle_button_new_with_label("Live view");
-	//dispCtrl->widgets.run = gtk_toggle_button_new_with_label("Acquisition");
-	//tune them
-	gtk_window_set_title(GTK_WINDOW(dispCtrl->widgets.controlWindow), "capture control");
-	gtk_window_set_keep_above(GTK_WINDOW(dispCtrl->widgets.controlWindow), TRUE);
-	//gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dispCtrl->widgets.raw), TRUE);
-	//gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dispCtrl->widgets.show), TRUE);
-	//gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dispCtrl->widgets.run), TRUE); //actual start is delayed by 100ms, see below
-	gtk_widget_set_sensitive(dispCtrl->widgets.boxgpi, FALSE);
-	gtk_scale_set_digits(GTK_SCALE(dispCtrl->widgets.exp), 0);
-	gtk_range_set_update_policy(GTK_RANGE(dispCtrl->widgets.exp), GTK_UPDATE_DISCONTINUOUS);
-	gtk_range_set_update_policy(GTK_RANGE(dispCtrl->widgets.gain), GTK_UPDATE_DISCONTINUOUS);
-	gtk_adjustment_set_value(gtk_range_get_adjustment(GTK_RANGE(dispCtrl->widgets.exp)), 10);
-	gtk_scale_set_value_pos(GTK_SCALE(dispCtrl->widgets.exp), GTK_POS_RIGHT);
-	gtk_scale_set_value_pos(GTK_SCALE(dispCtrl->widgets.gain), GTK_POS_RIGHT);
-	gtk_widget_set_sensitive(dispCtrl->widgets.boxx, FALSE);
-	gtk_widget_set_sensitive(dispCtrl->widgets.boxy, FALSE);
-	gtk_widget_set_sensitive(dispCtrl->widgets.exp, FALSE);
-	gtk_widget_set_sensitive(dispCtrl->widgets.gain, FALSE);
-	//pack everything into window
-
-	for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
-	{
-		gtk_container_add(
-			GTK_CONTAINER(dispCtrl->widgets.boxgpi), 
-			dispCtrl->widgets.gpi_levels[i]);
-	}
-
-
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.boxgpi);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxx), dispCtrl->widgets.labelx0);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxx), dispCtrl->widgets.x0);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxy), dispCtrl->widgets.labely0);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxy), dispCtrl->widgets.y0);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxx), dispCtrl->widgets.labelcx);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxx), dispCtrl->widgets.cx);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxy), dispCtrl->widgets.cy);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.boxx);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.boxy);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.labelexp);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.exp);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.labelgain);
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.boxmain), dispCtrl->widgets.gain);
-
-
-	gtk_container_add(GTK_CONTAINER(dispCtrl->widgets.controlWindow), dispCtrl->widgets.boxmain);
-
-	return TRUE;
-}
-
-gboolean lirenaCaptureGUI_setupCallbacks(LirenaCaptureApp *appPtr)
-{
-	g_signal_connect(
-		gtk_range_get_adjustment(
-			GTK_RANGE(appPtr->uiPtr->widgets.gain)),
-		"value_changed",
-		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateGain),
-		&appPtr->streamerPtr->camParams);
-
-	g_signal_connect(
-		gtk_range_get_adjustment(
-			GTK_RANGE(appPtr->uiPtr->widgets.exp)),
-		"value_changed",
-		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateExposure),
-		&appPtr->streamerPtr->camParams);
-
-	g_signal_connect(
-		gtk_spin_button_get_adjustment(
-			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.x0)),
-		"value_changed",
-		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateX0),
-		&appPtr->streamerPtr->camParams);
-
-	g_signal_connect(
-		gtk_spin_button_get_adjustment(
-			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.y0)),
-		"value_changed",
-		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateY0),
-		&appPtr->streamerPtr->camParams);
-
-	g_signal_connect(
-		gtk_spin_button_get_adjustment(
-			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.cx)),
-		"value_changed", 
-		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateCx), 
-		&appPtr->streamerPtr->camParams);
-
-	g_signal_connect(
-		gtk_spin_button_get_adjustment(
-			GTK_SPIN_BUTTON(appPtr->uiPtr->widgets.cy)),
-		"value_changed", 
-		G_CALLBACK(lirenaCaptureXimeaGUI_cb_updateCy), 
-		&appPtr->streamerPtr->camParams);
-
-	g_signal_connect(
-		appPtr->uiPtr->widgets.controlWindow,
-		"delete_event", 
-		G_CALLBACK(LirenaCaptureXimeaGUI_cb_closeWindow),
-		appPtr->streamerPtr);
-
-	//g_signal_connect(
-	//	appPtr->uiPtr->widgets.show,
-	//  "toggled",
-	//	G_CALLBACK(update_show), 
-	//  &appPtr->streamerPtr->camParams);
-
-	return TRUE;
-}
 
 
 
@@ -471,28 +575,28 @@ gboolean lirenaXimeaCaptureDevice_openCam(LirenaCaptureApp *appPtr)
 }
 
 
-gboolean lirenaStreamer_startCaptureThread(
-	LirenaCaptureApp *appPtr)
-{
-	g_assert(appPtr->streamerPtr->doAcquireFrames &&
-		"capture thread must only be stardet if capturing is desired");
+// gboolean lirenaStreamer_startCaptureThread(
+// 	LirenaCaptureApp *appPtr)
+// {
+// 	g_assert(appPtr->streamerPtr->doAcquireFrames &&
+// 		"capture thread must only be stardet if capturing is desired");
 	
-	int pthread_ret = pthread_create(
-						&appPtr->streamerPtr->captureThread,
-						NULL, 
-						lirena_XimeaStreamer_captureThread_run, 
-						(void *)appPtr);
+// 	int pthread_ret = pthread_create(
+// 						&appPtr->streamerPtr->captureThread,
+// 						NULL, 
+// 						lirena_XimeaStreamer_captureThread_run, 
+// 						(void *)appPtr);
 
-	if (pthread_ret != 0)
-	{
-		//triple fail redundancy ;(
-		g_assert(0 &&  "capture thread creation failed!");
-		exit(1);
-		return FALSE;
-	}
+// 	if (pthread_ret != 0)
+// 	{
+// 		//triple fail redundancy ;(
+// 		g_assert(0 &&  "capture thread creation failed!");
+// 		exit(1);
+// 		return FALSE;
+// 	}
 	
-	return TRUE;
-}
+// 	return TRUE;
+// }
 
 
 
@@ -588,66 +692,6 @@ gboolean lirenaXimeaCaptureDevice_setupCamParams(
 }
 
 
-gboolean lirenaCaptureXimeaGUI_updateWidgets(
-    LirenaCaptureApp* appPtr)
-{
-	LirenaXimeaStreamer_CameraParams * camParamsPtr = 
-			&appPtr->streamerPtr->camParams;
-
-	//adapt GUI widgets
-	if (camParamsPtr->cameraHandle  != INVALID_HANDLE_VALUE)
-	{
-		LirenaXimeaCaptureWidgets *widgets = &appPtr->uiPtr->widgets;
-
-		gtk_adjustment_configure(
-			gtk_range_get_adjustment(GTK_RANGE(widgets->gain)),
-			camParamsPtr->gainToUse, 
-			camParamsPtr->mingain, 
-			camParamsPtr->maxgain, 
-			0.1, 1, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
-			GTK_SPIN_BUTTON(widgets->x0)), 
-			camParamsPtr->roix0, 
-			0, camParamsPtr->maxcx - 4, 2, 20, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
-			GTK_SPIN_BUTTON(widgets->y0)), 
-			camParamsPtr->roiy0, 0, 
-			camParamsPtr->maxcy - 2, 2, 20, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
-			GTK_SPIN_BUTTON(widgets->cx)), 
-			camParamsPtr->roicx, 4,
-			camParamsPtr->maxcx, 4, 20, 0);
-		gtk_adjustment_configure(gtk_spin_button_get_adjustment(
-			GTK_SPIN_BUTTON(widgets->cy)), 
-			camParamsPtr->roicy, 2, 
-			camParamsPtr->maxcy, 2, 20, 0);
-
-		gtk_adjustment_set_value(
-			gtk_range_get_adjustment(GTK_RANGE(widgets->exp)),
-			appPtr->configPtr->ximeaparams.exposure_ms);
-
-
-		g_assert(appPtr->streamerPtr->doAcquireFrames && 
-			"should be true all the time in this minimal setup");
-		appPtr->streamerPtr->doAcquireFrames = true; 
-
-		gtk_widget_set_sensitive(widgets->boxx, appPtr->streamerPtr->doAcquireFrames);
-		gtk_widget_set_sensitive(widgets->boxy, appPtr->streamerPtr->doAcquireFrames);
-		gtk_widget_set_sensitive(widgets->exp, appPtr->streamerPtr->doAcquireFrames);
-		gtk_widget_set_sensitive(widgets->gain, appPtr->streamerPtr->doAcquireFrames);
-	
-		//GPI stuff; TODO understand this ...
-		for (int i = 0; i < LIRENA_XIMEA_MAX_GPI_SELECTORS; i++)
-		{
-			gtk_toggle_button_set_active(
-				GTK_TOGGLE_BUTTON(appPtr->uiPtr->widgets.gpi_levels[i]), 
-				appPtr->streamerPtr->camParams.gpi_levels[i]);
-		}
-		//} end GPI stuff
-	}
-
-	return TRUE;
-}
 
  
 
@@ -690,6 +734,8 @@ void lirenaCaptureXimeaGUI_cb_grabXhandleForVidWindow(GtkWidget *widget,
 		g_error("Couldn't create native window needed for GstXOverlay!");
 	}
 
+	//this may cause problems:
+	// https://gstreamer.freedesktop.org/documentation/video/gstvideooverlay.html?gi-language=c
 	displayCtrl->drawableWindow_handle = GDK_WINDOW_XID(window);
 }
 
@@ -698,22 +744,11 @@ void lirenaCaptureXimeaGUI_cb_grabXhandleForVidWindow(GtkWidget *widget,
 
 
 gboolean LirenaCaptureXimeaGUI_cb_closeWindow(GtkWidget *, GdkEvent *,
-				  LirenaStreamer* streamerPtr)
+				  LirenaCaptureUI * uiPtr)
 {
-	// pointer non null and pointee not 0 --> video thread is active
-	if (streamerPtr->captureThreadIsRunning)
-	{
-		//video thead is active, shall be shutdown first
-		streamerPtr->doAcquireFrames = FALSE;
+	uiPtr->streamerPtr->terminateCaptureThread();
+	uiPtr->shutdownUI();
 
-		pthread_join(streamerPtr->captureThread, NULL);
-		streamerPtr->captureThread = 0;
-		streamerPtr->captureThreadIsRunning = false;
-	}
-	
-	//video thead is joined, we can leave GUI stuff altogether
-	gtk_main_quit();
-	
 	return TRUE;
 }
 

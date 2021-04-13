@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 	appPtr = nullptr;
 
 	// exit 0 on success
-	return success ? 0 : 1;
+	// return success ? 0 : 1;
 	//} Rewritten code end ----------------------------------------------------
 
 
@@ -161,16 +161,15 @@ int main(int argc, char **argv)
 		success &= lirenaXimeaCaptureDevice_setupCamParams(appPtr);
 
 		// Create GUI
-		success &= lirenaCaptureXimeaGUI_createWidgets(appPtr->uiPtr);
-		// adapt GUI widgets to cam params
-		//lirenaCaptureXimeaGUI_updateWidgets
-		success &= lirenaCaptureXimeaGUI_updateWidgets(appPtr);
+		success &= appPtr->uiPtr->setupUI();
+
+		
 
 		//start acquisition
-		//lirenaStreamer_startCaptureThread
-		success &= lirenaStreamer_startCaptureThread(appPtr);
+		success &= appPtr->streamerPtr->launchCaptureThread(appPtr);
 
 
+		appPtr->uiPtr->enterMainLoop();
 		//lirenaCaptureXimeaGUI_enterMainLoop(appPtr->uiPtr);
 
 
@@ -260,7 +259,7 @@ int main(int argc, char **argv)
 	delete appPtr;
 	appPtr = NULL;
 
-	return 0;
+	return success ? 0 : 1;
 }
 
 //----------------------------------------------------------------------------

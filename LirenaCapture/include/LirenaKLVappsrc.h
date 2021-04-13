@@ -17,7 +17,7 @@
 
 // don't know if low keys are reserved or forbidden or sth...
 #define KLV_KEY_OFFSET 0
-enum Limera_KLV_keys
+enum Lirena_KLV_keys
 {
     KLV_KEY_invalid  = 0 + KLV_KEY_OFFSET,
     KLV_KEY_string   = 1 + KLV_KEY_OFFSET,
@@ -44,6 +44,15 @@ enum Limera_KLV_keys
     
     KLV_KEY_num_keys = 12
 };
+
+//forward:
+struct LirenaFrame;
+
+GstFlowReturn lirena_KLV_appsrc_CollectAndPushFrameMetaData(
+    GstElement * appsrc_klv,
+    LirenaFrame* frame
+);
+
 
 // Converts relevant values to big endian and writes a KLV triple
 // return pointer points at the byte right after the area 

@@ -27,7 +27,7 @@
 
 //----------------------------------------------------------------------------
 // Macros
-#define LIRENA_STATUS_STRING_LENGTH 4096
+#define LIRENA_STATUS_STRING_MAX_LENGTH 4096
 
 
 
@@ -85,11 +85,10 @@ struct LirenaXimeaStreamer_CameraParams
 // rather skip frames
 // "2" works for 2k@140FPS, but there is some jam in the beginning.
 // "6" works without jam for 2k@140FPS,
-#define LIRENA_XIMEA_STREAMER_MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 6
-// for human-readable meta data formatting
-#define LIRENA_XIMEA_STREAMER_MAX_STATUS_STRING_LENGTH 4096
+#define LIRENA_STREAMER_MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 6
 
-struct LirenaXimeaStreamer_CudaFrameData
+
+struct LirenaStreamer_CudaFrameData
 {
 	int TODO_dummyTillLinkage;
 
@@ -123,17 +122,21 @@ struct LirenaXimeaStreamer_CudaFrameData
 
 struct LirenaFrameCaptureTimingData
 {
-    char statusString[LIRENA_STATUS_STRING_LENGTH];
+    char statusString[LIRENA_STATUS_STRING_MAX_LENGTH];
 
-    unsigned long current_time = 0;
-    unsigned long prev_time = 0;
+	GstClockTime lastStreamStart_abs_time = 0;
+    GstClockTime current_abs_time = 0;
+    GstClockTime prev_abs_time = 0;
+	// derived value:
+	// do not use in gst buffer duration, 
+	//makes problems,don't know why
+	GstClockTime current_frame_duration = 0;
 
 	unsigned long current_sensed_frame_count = 0;  
     unsigned long current_captured_frame_count = 0;
-    unsigned long current_preprocessed_frame_count = 0;
+    //unsigned long current_preprocessed_frame_count = 0;
 
-	//derived values:
-	unsigned long current_frame_duration = 0;
+	// derived value:
     unsigned long lost_frames_count = 0;
 };
 
@@ -143,13 +146,8 @@ struct LirenaNaviMetaData
 	int dummy_waitingForInputFromLightHouseGuys;
 };
 
-struct FrameMetaData
-{
-	LirenaFrameCaptureTimingData   timingData;
-	LirenaNaviMetaData             naviMeta;
-};
 
-struct Frame
+struct LirenaFrame
 {
 	struct MetaData
 	{
@@ -159,7 +157,7 @@ struct Frame
 
 	MetaData metaData;
 
-	LirenaXimeaStreamer_CudaFrameData cudaFrameData;
+	LirenaStreamer_CudaFrameData cudaFrameData;
 
 	//TODO put frame (ximea)data/(gst)buffer(s) in here
 
@@ -211,9 +209,10 @@ public:
 		//cv::cuda::Stream cudaDemoisaicStream;
 		
 		// minimalistic memory pool for GPU matrix objects, used by cuda stream
-		Frame framebufferPool[
-			LIRENA_XIMEA_STREAMER_MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES
+		LirenaFrame framebufferPool[
+			LIRENA_STREAMER_MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES
 		];
+		int currentFrameBufferPoolIndex = 0;
 
 		//TODO put gstreamer Element objects here
 };

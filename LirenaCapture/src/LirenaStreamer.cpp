@@ -23,16 +23,11 @@ LirenaStreamer::LirenaStreamer(LirenaConfig * configPtr)
 
 
 	this->captureThread = 0;
-
-
-	//UI-related stuff to follow:
-
 	this->doAcquireFrames = TRUE;
 
-
-
-	captureDevicePtr = LirenaCaptureDevice::createCaptureDevice(
-		configPtr);
+	captureDevicePtr = 
+		LirenaCaptureDevice::createCaptureDevice(
+			configPtr);
 
 	//TODO outsource to device
 	this->camParams.cameraHandle = INVALID_HANDLE_VALUE;
@@ -64,12 +59,14 @@ bool LirenaStreamer::setupCaptureDevice()
 	g_assert(0&& "TODO implement");
 	return false;
 }
+
 		
 bool LirenaStreamer::setupGStreamerPipeline()
 {
 	g_assert(0&& "TODO implement");
 	return false;
 }
+
 
 bool LirenaStreamer::launchCaptureThread(
 	LirenaCaptureApp * appPtr_refactor_compat_TODO_delete
@@ -97,9 +94,9 @@ bool LirenaStreamer::launchCaptureThread(
 		return false;
 	}
 	
-
 	return true;
 }
+
 
 bool LirenaStreamer::terminateCaptureThread()
 {
@@ -116,8 +113,8 @@ bool LirenaStreamer::terminateCaptureThread()
 		pthread_join(captureThread, NULL);
 
 		//cleanup variables
-		captureThread = 0;
 		captureThreadIsRunning = false;
+		captureThread = 0;
 
 		return true;
 	} 
@@ -544,42 +541,34 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 {
 	LirenaCaptureApp *appPtr = (LirenaCaptureApp *)appVoidPtr;
 	appPtr->streamerPtr->captureThreadIsRunning = true;
-
-	
-	GstElement *pipeline = 0;
-
-	
-	GstFlowReturn ret;
-	
-
-	
-
-	int maxVideoWindowWidth = 1000;
-	int maxVideoWindowHeight = 1000;
-
-	int prev_width = -1;
-	int prev_height = -1;
+	GstFlowReturn ret = GST_FLOW_OK;
 
 
+
+
+
+
+	//{ TODO migrate this to LirenaFrame::Metadata:TimingData
+	// and only use GstClock
 	gchar statistics_string[1024];
 	unsigned long frames = 0;
 	unsigned long prevframes = 0;
 	unsigned long lostframes = 0;
 	long lastframe = -1;
-
-	unsigned long curtime, prevtime;
-	unsigned long firsttime = getcurus();
-	//GstClockTime gst_defaultClock_prevTime = 0;
-
-
+	unsigned long curtime;
+	unsigned long prevtime;
+	//unsigned long starttime;
+	//}
 
 
-	XI_IMG_FORMAT prev_format = XI_RAW8;
-	XI_IMG image;
-	image.size = sizeof(XI_IMG);
-	image.bp = NULL;
-	image.bp_size = 0;
 
+	//{ TODO migrate this to LirenaXimeaCaptureDevice
+	XI_IMG_FORMAT xiImage_prev_format = XI_RAW8;
+	XI_IMG xiImage;
+	xiImage.size = sizeof(XI_IMG);
+	xiImage.bp = NULL;
+	xiImage.bp_size = 0;
+	//}
 
 
 
@@ -590,77 +579,30 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 
 
-	if(appPtr->uiPtr->doMaintainOwnVideoWindow())
-	{
-		// create new window for video rendering; 
-		// n.b. this is also possible WITHOUT GUI! if will need GTK, though
 
-		gdk_threads_enter();
-
-		appPtr->uiPtr->widgets.videoWindow = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-
-		gtk_window_set_title(
-			GTK_WINDOW(appPtr->uiPtr->widgets.videoWindow), "LirenaCapture local display");
-		gtk_widget_set_double_buffered(
-			appPtr->uiPtr->widgets.videoWindow, FALSE);
-
-		g_signal_connect(appPtr->uiPtr->widgets.videoWindow,
-						"realize", 
-						G_CALLBACK(lirenaCaptureXimeaGUI_cb_grabXhandleForVidWindow), 
-						appPtr->uiPtr);
-
-		g_signal_connect(appPtr->uiPtr->widgets.videoWindow,
-						"delete-event", G_CALLBACK(LirenaCaptureXimeaGUI_cb_closeWindow),
-						appPtr->streamerPtr);
-
-		gtk_widget_show_all(appPtr->uiPtr->widgets.videoWindow);
-		//TODO find out if nececcary, and if yes in what order wrt. gtk_widget_show_all
-		gtk_widget_realize(appPtr->uiPtr->widgets.videoWindow);
-
-		appPtr->uiPtr->widgets.screen = gdk_screen_get_default();
-
-		maxVideoWindowWidth = 0.8 * gdk_screen_get_width(appPtr->uiPtr->widgets.screen);
-		maxVideoWindowHeight = 0.8 * gdk_screen_get_width(appPtr->uiPtr->widgets.screen);
-
-		gdk_threads_leave();
-	}
-
-
-
+	//{ construct and launch pipeline
 	gchar * gstreamerPipelineString = 
 		constructGstreamerPipelineString(appPtr->configPtr);
-
-	pipeline = gst_parse_launch(
-		gstreamerPipelineString,
-		NULL);
-
+	GstElement *pipeline = gst_parse_launch(gstreamerPipelineString, NULL);
 	g_free(gstreamerPipelineString);
+	if (!pipeline) {return lirena_XimeaStreamer_captureThread_terminate(appPtr);}
+	//}
 
-	if (!pipeline)
-	{
-		return lirena_XimeaStreamer_captureThread_terminate(appPtr);
-	}
+	//TODO this could also be created in main thread, right?
+	// answer: it SHOULD be:
+	// https://gstreamer.freedesktop.org/documentation/video/gstvideooverlay.html?gi-language=c
+	//appPtr->uiPtr->optionallyCreateSelfManagedVideoWindow();
 
+	appPtr->uiPtr->optionallyBindSelfManagedVideoWindowToGStreamer(pipeline);
 
-
-	if(appPtr->uiPtr->doMaintainOwnVideoWindow())
-	{
-		GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
-		gst_bus_set_sync_handler(
-			bus, 
-			(GstBusSyncHandler)lirenaCaptureXimeaGUI_cb_handleBusSyncEvent,
-			appPtr->uiPtr,
-			NULL);
-		gst_object_unref(bus);
-	}
 
 
 
 	//{ "main loop"
-	firsttime = getcurus();
 	prevtime = getcurus();
-
-	//gst_defaultClock_prevTime = GST_ELEMENT(pipeline)->base_time;
+	//for detection of resize events
+    int prevVideoWindowWidth = -1;
+	int prevVideoWindowHeight = -1;
 
 	while (appPtr->streamerPtr->doAcquireFrames)
 	{
@@ -669,7 +611,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 		{
 
 			// grab image
-			if (xiGetImage(appPtr->streamerPtr->camParams.cameraHandle, 5000, &image) != XI_OK)
+			if (xiGetImage(appPtr->streamerPtr->camParams.cameraHandle, 5000, &xiImage) != XI_OK)
 			{
 				break;
 			}
@@ -680,24 +622,22 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			// TODO setup a working GstClock (PTP)
 			// usage: 	GST_BUFFER_PTS(myBuffer) = frame_capture_PTS;
 			curtime = getcurus();
-			guint64 frame_capture_PTS = (guint64)(curtime - firsttime) * GST_USECOND;
+			//guint64 frame_capture_PTS = (guint64)(curtime - firsttime) * GST_USECOND;
 			//}
 
-			GstElement *appsrc_video = 0;
+
+			
+			GstElement *appsrc_video = 
+				gst_bin_get_by_name(GST_BIN(pipeline), "captureAppSrc");
+
 
 			//n.b. pushed buffers don't need to be unrefed
 			GstBuffer *video_frame_GstBuffer = 0;
-
-			
-			appsrc_video = gst_bin_get_by_name(GST_BIN(pipeline), "captureAppSrc");
-
-
-
 			unsigned long raw_image_buffer_size =
-				image.width * image.height * (image.frm == XI_RAW8 ? 1 : 4);
+				xiImage.width * xiImage.height * (xiImage.frm == XI_RAW8 ? 1 : 4);
 
 			//{ alloc mem for buffer and fill buffer, depending on padding
-			if (!image.padding_x)
+			if (!xiImage.padding_x)
 			{
 				video_frame_GstBuffer = gst_buffer_new();
 
@@ -706,7 +646,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 					-1,
 					gst_memory_new_wrapped(
 						GST_MEMORY_FLAG_READONLY,
-						(guint8 *)image.bp,
+						(guint8 *)xiImage.bp,
 						raw_image_buffer_size,
 						0,
 						raw_image_buffer_size,
@@ -720,25 +660,29 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 				if (!video_frame_GstBuffer)
 					break;
 
-				for (guint i = 0; i < image.height; i++)
+				for (guint i = 0; i < xiImage.height; i++)
 				{
 					gst_buffer_fill(
 						video_frame_GstBuffer,
-						i * image.width * (image.frm == XI_RAW8 ? 1 : 4),
-						(guint8 *)image.bp +
-							i * (image.width * (image.frm == XI_RAW8 ? 1 : 4) +
-								 image.padding_x),
-						image.width * (image.frm == XI_RAW8 ? 1 : 4));
+						i * xiImage.width * (xiImage.frm == XI_RAW8 ? 1 : 4),
+						(guint8 *)xiImage.bp +
+							i * (xiImage.width * (xiImage.frm == XI_RAW8 ? 1 : 4) +
+								 xiImage.padding_x),
+						xiImage.width * (xiImage.frm == XI_RAW8 ? 1 : 4));
 				}
 			}
 			//} end alloc mem and fill video gst buffer
 
+
+
+
+
 			
 			// init/update appsrc caps and scale-element caps ?
 			if (
-				(guint)prev_width != image.width ||
-				(guint)prev_height != image.height ||
-				prev_format != image.frm
+				(guint)prevVideoWindowWidth != xiImage.width ||
+				(guint)prevVideoWindowHeight != xiImage.height ||
+				xiImage_prev_format != xiImage.frm
 			)
 			{
 				
@@ -749,8 +693,8 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 				
 				/*
 				printf("DEBUG: BGRx from debayering;\n");
-				int wid_half= image.width/2;
-				int height_half= image.height/2;
+				int wid_half= xiImage.width/2;
+				int height_half= xiImage.height/2;
 			    appsrc_video_caps = gst_caps_new_simple(
 							"video/x-raw",
 							"format", G_TYPE_STRING, "BGRx",
@@ -765,11 +709,11 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 							"height", G_TYPE_INT, height_half,
 							NULL);
 				
-				// debayering: raw image is not relevant anymore.. NOT... mess
+				// debayering: raw xiImage is not relevant anymore.. NOT... mess
 				
 				*/
 
-				if (image.frm == XI_RAW8)
+				if (xiImage.frm == XI_RAW8)
 				{
 					/* old raw stuff w/o debayering
 				    printf("DEBUG: GRAY8\n");
@@ -779,8 +723,8 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 							"bpp", G_TYPE_INT, 8,
 							"depth", G_TYPE_INT, 8,
 							"framerate", GST_TYPE_FRACTION, 0, 1,
-							"width", G_TYPE_INT, image.width,
-							"height", G_TYPE_INT, image.height,
+							"width", G_TYPE_INT, xiImage.width,
+							"height", G_TYPE_INT, xiImage.height,
 							NULL);
 					*/
 
@@ -791,11 +735,11 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 						"bpp", G_TYPE_INT, 8,
 						"depth", G_TYPE_INT, 8,
 						"framerate", GST_TYPE_FRACTION, 0, 1,
-						"width", G_TYPE_INT, image.width,
-						"height", G_TYPE_INT, image.height,
+						"width", G_TYPE_INT, xiImage.width,
+						"height", G_TYPE_INT, xiImage.height,
 						NULL);
 				}
-				else if (image.frm == XI_RGB32)
+				else if (xiImage.frm == XI_RGB32)
 				{
 					printf("DEBUG: RGB32\n");
 					appsrc_video_caps = gst_caps_new_simple(
@@ -808,8 +752,8 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 						"green_mask", G_TYPE_INT, 0x00ff0000,
 						"blue_mask", G_TYPE_INT, 0xff000000,
 						"framerate", GST_TYPE_FRACTION, 0, 1,
-						"width", G_TYPE_INT, image.width,
-						"height", G_TYPE_INT, image.height,
+						"width", G_TYPE_INT, xiImage.width,
+						"height", G_TYPE_INT, xiImage.height,
 						NULL);
 				}
 				else
@@ -832,61 +776,17 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 				// update so that no refresh of caps needs to happen again
 				// unless one messes with the cam res or format
-				prev_width = image.width;
-				prev_height = image.height;
-				prev_format = image.frm;
+				prevVideoWindowWidth = xiImage.width;
+				prevVideoWindowHeight = xiImage.height;
+				xiImage_prev_format = xiImage.frm;
 
 				//} end init/update appsrc caps depending on raw vs color
 
 
 
-				//{ init/update scale-element caps for local displaying?
-				if(appPtr->uiPtr->doMaintainOwnVideoWindow())
-				{
-					GstElement *scale_element = 0;
-					GstCaps *size_caps = 0;
-					scale_element = gst_bin_get_by_name(GST_BIN(pipeline), "scale_element");
-
-					int width = image.width;
-					int height = image.height;
-
-					while (width > maxVideoWindowWidth || height > maxVideoWindowHeight)
-					{
-						width /= 2;
-						height /= 2;
-					}
-
-					if (size_caps)
-					{
-						gst_caps_unref(size_caps);
-					}
-
-					size_caps =
-						gst_caps_new_simple(
-							"video/x-raw",
-							"width", G_TYPE_INT, width,
-							"height", G_TYPE_INT, height,
-							NULL);
-
-					g_object_set(G_OBJECT(scale_element), "caps", size_caps, NULL);
-
-					gst_object_unref(scale_element);
-					
-					//free ref from local scope:
-					if (size_caps)
-					{
-						gst_caps_unref(size_caps);
-					}
-
-
-					gdk_threads_enter();
-					gtk_window_resize(
-						GTK_WINDOW(appPtr->uiPtr->widgets.videoWindow), 
-						width, height);
-					gdk_threads_leave();
-				}
-				//} end  init/update scale-element caps for local displaying
-
+				// init/update scale-element caps for local displaying?
+				appPtr->uiPtr->optionallyAdaptSelfManagedVideoWindowSizeAndScaling(
+						pipeline, xiImage.width, xiImage.height);
 			}
 
 
@@ -916,6 +816,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 				gstreamerCurrentAbsoluteTime 
 				- 
 				gstreamerBaseTime_lastStreamStartTime;
+
 			GST_DEBUG("myPTS_timestamp: %lu", myPTS_timestamp);
 
 			GST_BUFFER_PTS(video_frame_GstBuffer) = myPTS_timestamp;
@@ -940,38 +841,15 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 			//{  statistics bookkeeping:
 			frames++;
-			if (image.nframe > lastframe)
+			if (xiImage.nframe > lastframe)
 			{
-				lostframes += image.nframe - (lastframe + 1);
+				lostframes += xiImage.nframe - (lastframe + 1);
 			}
-			lastframe = image.nframe;
+			lastframe = xiImage.nframe;
 			// n.b. curtime is updated above already, after frame aquisition
 
 
-			//format for KLV, aligned to 16 bytes:
-			snprintf(
-				statistics_string,
-				1024,
-			   //0123456789ABCDEF
-        		"0123456789ABCDE\n"
-				"Acquisition: [ \n"
-				"frames captr'd:\n"
-				"%015lu\n"
-				"frames skipped:\n"
-				"%015lu\n"
-				"PTS  timestamp:\n"
-				"%015lu\n"
-				"abs. timestamp:\n"
-				"%015lu\n"
-				"fps:           \n"
-				"%015.2f\n"
-				"]              \n"
-				,
-				frames,
-				lostframes,
-				myPTS_timestamp,
-				gstreamerCurrentAbsoluteTime,
-				1000000.0 * (frames - prevframes) / (curtime - prevtime));
+
 		
 		//}
 		//if(useAppsrc)
@@ -979,111 +857,18 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			//-----------------------------------------------------------------
 			//{ KLV buffer injection
 			// TODO outsource after timing encapsulation
-			// TODO decouple from appsrc; for this, 
+			// TODO decouple from video appsrc; for this, 
 			//  pad event of videotestsrc must be listened to
 			if(appPtr->configPtr->injectKLVmeta)
 			{
 				GstElement * appsrc_klv = gst_bin_get_by_name(GST_BIN(pipeline), "klvSrc");
-
-				// hundred thousand bytes
-				#define KLV_BUFFER_MAX_SIZE 100000
-				guint8 klv_data[KLV_BUFFER_MAX_SIZE];
-				memset(klv_data, 0, KLV_BUFFER_MAX_SIZE);
-
-				guint8 *klv_data_end_ptr = &klv_data[0];
-
-				// Write string  "0123456789ABCDEF"
-				gchar const *test16byteString = "0123456789ABCDEF";
-				klv_data_end_ptr = write_KLV_item(
-					klv_data_end_ptr,				 // guint8 * klv_buffer,
-					KLV_KEY_string,					 // uint64_t key_host,
-					strlen(test16byteString),		 // uint64_t len_host,
-					(guint8 const *)test16byteString // guint8 * value_ptr
+				
+				//TODO get frame shizzle up to here!
+				g_assert(0);
+				lirena_KLV_appsrc_CollectAndPushFrameMetaData(
+					appsrc_klv,
+					nullptr //TODO get frame shizzle up to here!
 				);
-
-
-				// write statistics_string as sth human readable
-				g_assert( "stat. string is multiple of 16 bytes/chars" &&
-					strlen(statistics_string) %16 == 0);
-
-				klv_data_end_ptr = write_KLV_item(
-					klv_data_end_ptr,				 // guint8 * klv_buffer,
-					KLV_KEY_string,					 // uint64_t key_host,
-					strlen(statistics_string),		 // uint64_t len_host,
-					(guint8 const *)statistics_string // guint8 * value_ptr
-				);
-
-				//TODO write GST clock -derived timestamps also as
-				// binary big endian 64bit unsiged int!
-
-				// Write frame count KLV_KEY_image_frame_number
-				uint64_t value_be = htobe64((uint64_t)frames);
-				klv_data_end_ptr = write_KLV_item(
-					klv_data_end_ptr,					 // guint8 * klv_buffer,
-					KLV_KEY_image_captured_frame_number, // uint64_t key_host,
-					sizeof(uint64_t),					 // uint64_t len_host,
-					(guint8 const *)&value_be			 // guint8 * value_ptr
-				);
-
-				// Write frame timestamp KLV_KEY_image_capture_time_stamp
-				value_be = htobe64((uint64_t)frame_capture_PTS);
-				klv_data_end_ptr = write_KLV_item(
-					klv_data_end_ptr,				  // guint8 * klv_buffer,
-					KLV_KEY_image_capture_time_stamp, // uint64_t key_host,
-					sizeof(uint64_t),				  // uint64_t len_host,
-					(guint8 const *)&value_be		  // guint8 * value_ptr
-				);
-
-				// Write string "!frame meta end!"
-				gchar const *frameMetaEndString = "!frame meta end!";
-				klv_data_end_ptr = write_KLV_item(
-					klv_data_end_ptr,				   // guint8 * klv_buffer,
-					KLV_KEY_string,					   // uint64_t key_host,
-					strlen(frameMetaEndString),		   // uint64_t len_host,
-					(guint8 const *)frameMetaEndString // guint8 * value_ptr
-				);
-
-
-				//TODO maybe write statistics_string
-
-				guint klvBufferSize = klv_data_end_ptr - (&klv_data[0]);
-
-				// create empty GstBuffer
-				GstBuffer *klv_frame_GstBuffer = gst_buffer_new();
-
-				// alloc memory for buffer
-				GstMemory *gstMem = gst_allocator_alloc(NULL, klvBufferSize, NULL);
-
-				// add the buffer
-				gst_buffer_append_memory(klv_frame_GstBuffer, gstMem);
-
-				// get WRITE access to the memory and fill with our KLV data
-				GstMapInfo gstInfo;
-				gst_buffer_map(klv_frame_GstBuffer, &gstInfo, GST_MAP_WRITE);
-
-				//do the writing
-				memcpy(gstInfo.data, klv_data, gstInfo.size);
-
-				gst_buffer_unmap(klv_frame_GstBuffer, &gstInfo);
-
-				// Timestamp stuff onto KLV buffer itself to get associated
-				// with video buffer:
-				//GST_BUFFER_TIMESTAMP(klv_frame_GstBuffer) = GST_CLOCK_TIME_NONE;
-				//GST_BUFFER_PTS(klv_frame_GstBuffer) = frame_capture_PTS;
-
-				GST_BUFFER_PTS(klv_frame_GstBuffer) = myPTS_timestamp;
-				//GST_BUFFER_DURATION (klv_frame_GstBuffer) = myDuration;
-
-				// This function takes ownership of the buffer. so no unref!
-				ret = gst_app_src_push_buffer(
-					GST_APP_SRC(appsrc_klv),
-					klv_frame_GstBuffer);
-
-				if (ret != GST_FLOW_OK)
-				{	
-					g_assert(0 && "pushing KLV buffer to appsrc failed!");
-					break;
-				}
 
 				// free scope-local reference to KLV appsrc
 				gst_object_unref(appsrc_klv);
@@ -1148,7 +933,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 	gst_element_set_state(pipeline, GST_STATE_NULL);
 	gst_object_unref(GST_OBJECT(pipeline));
 
-	//exit thred:
+	//exit thread:
 	return lirena_XimeaStreamer_captureThread_terminate(appPtr);
 
 	//} end cleanup
@@ -1159,26 +944,8 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 //TODO adapt to class structure
 void * lirena_XimeaStreamer_captureThread_terminate(LirenaCaptureApp *appPtr)
-{
-	bool doDisplayVideoLocally = appPtr->configPtr->doLocalDisplay;
-	bool haveLocalGUI = appPtr->configPtr->haveLocalGUI;
-	
-	if(doDisplayVideoLocally || haveLocalGUI)
-	{
-		gdk_threads_enter();
-
-		// don't bother with window destruction, just shut down GTK
-		// the dirty way
-		//gtk_widget_destroy(appPtr->uiPtr->widgets.videoWindow);
-		
-		gtk_main_quit();
-		gdk_threads_leave();
-	}
-	else
-	{
-		//g_main_loop_quit(appPtr->pureMainLoop);
-		appPtr->uiPtr->shutdownUI();
-	}
+{	
+	appPtr->uiPtr->shutdownUI();
 
 	xiStopAcquisition(appPtr->streamerPtr->camParams.cameraHandle);
 	appPtr->streamerPtr->doAcquireFrames = FALSE;
@@ -1186,10 +953,11 @@ void * lirena_XimeaStreamer_captureThread_terminate(LirenaCaptureApp *appPtr)
 	appPtr->streamerPtr->camParams.cameraHandle = INVALID_HANDLE_VALUE;
 
 
-    appPtr->streamerPtr->captureThreadIsRunning = false;
 
+    appPtr->streamerPtr->captureThreadIsRunning = false;
 	//DON't mess with the thread ID from within the thread!
 	//appPtr->streamerPtr->captureThread = 0;
 
+	//unused
 	return NULL;
 }
