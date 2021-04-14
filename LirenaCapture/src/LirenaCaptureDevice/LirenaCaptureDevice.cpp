@@ -1,5 +1,9 @@
 #include "LirenaCaptureDevice/LirenaCaptureDevice.h"
 
+
+#include "LirenaFrameQueue.h"
+
+
 #include <glib.h> //g_assert
 
 
@@ -166,7 +170,7 @@ bool LirenaXimeaCaptureDevice::postProcessFrame()
     return false;
 }
 
-bool LirenaXimeaCaptureDevice::calcTiming()  
+bool LirenaXimeaCaptureDevice::captureFrame()  
 {
     g_assert(0 && "TODO IMPLEMENT");
     return false;

@@ -75,6 +75,32 @@ class LirenaCaptureDevice
 
 
 //TODO outsource
+class LirenaXimeaCaptureDevice : public LirenaCaptureDevice
+{
+  public:
+
+    explicit LirenaXimeaCaptureDevice(LirenaConfig * configPtr);
+
+    virtual ~LirenaXimeaCaptureDevice();
+
+    virtual bool openDevice();
+    virtual bool setupParams();
+    virtual bool startVideoAquisition();
+
+    // acquisition, processing (e.g. debayer), enhancing (w/ metadata),
+    virtual bool captureFrame();
+    virtual bool postProcessFrame();
+    virtual bool getFrame();
+    //virtual bool calcTiming();
+    virtual bool acquireFrameMetadata();
+    
+    // "publishing"
+    bool pushFrameMetaDataToGstreamer();
+    virtual bool pushVideoFrameToGstreamer();
+
+};
+
+
 
 //LirenaGstVideotestsrcCaptureDevice
 class LirenaGstVideotestsrcCaptureDevice : public LirenaCaptureDevice
@@ -103,29 +129,7 @@ class LirenaGstVideotestsrcCaptureDevice : public LirenaCaptureDevice
 
 };
 
-class LirenaXimeaCaptureDevice : public LirenaCaptureDevice
-{
-  public:
 
-    explicit LirenaXimeaCaptureDevice(LirenaConfig * configPtr);
-
-    virtual ~LirenaXimeaCaptureDevice();
-
-    virtual bool openDevice();
-    virtual bool setupParams();
-    virtual bool startVideoAquisition();
-
-    // acquisition, processing (e.g. debayer), enhancing (w/ metadata),
-    virtual bool getFrame();
-    virtual bool postProcessFrame();
-    virtual bool calcTiming();
-    virtual bool acquireFrameMetadata();
-    
-    // "publishing"
-    bool pushFrameMetaDataToGstreamer();
-    virtual bool pushVideoFrameToGstreamer();
-
-};
 
 //TODO outsource
 class LirenaMagewellEcoCaptureDevice : public LirenaCaptureDevice

@@ -88,31 +88,31 @@ struct LirenaXimeaStreamer_CameraParams
 #define LIRENA_STREAMER_MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 6
 
 
-struct LirenaStreamer_CudaFrameData
+struct LirenaCudaFrame
 {
-	int TODO_dummyTillLinkage;
-
-
-    // CudaFrameData()
-    // : bufferIndex(0),
-    //   slotIsUsed(false),
+     LirenaCudaFrame()
+     : bufferIndex(0),
+       slotIsUsed(false)
     //   cudaHostMemory(nullptr),
     //   hostRawMat()
+	{}
 
-    // {}
-
-    // int bufferIndex; // backtracking into ApplicationState::cudaFrameDataArray
-    // // Status flag: Is data slot used by cuda right now?
-    // bool slotIsUsed; 
+    int bufferIndex; // backtracking into ApplicationState::cudaFrameDataArray
+    // Status flag: Is data slot used by cuda right now?
+    bool slotIsUsed; 
     
-    // //pointer to CUDA host data where the Ximea captured frame is mapped to
-    // void* cudaHostMemory; 
-    // // wrappers for cudaHostMemory for async GPU upload
+    //pointer to CUDA host data where the Ximea captured frame is mapped to
+    void* cudaHostMemory; 
+    
+	//TODO add as soon as setup jetson is here
+	// // wrappers for cudaHostMemory for async GPU upload
     // cv::Mat hostRawMat;
     // //cv::InputArray hostRawMatInputArray;
-    
-    // cuda::GpuMat gpuRawMatrix;   // OpenCV+Cuda-representation of XIMEA image
-    // cuda::GpuMat gpuColorMatrix; // debayered result image
+
+    // // OpenCV+Cuda-GPU- representation of XIMEA raw image
+    // cuda::GpuMat gpuRawMatrix;   
+	// // debayered result image (OpenCV+Cuda-GPU)
+    // cuda::GpuMat gpuColorMatrix; 
 };
 
 
@@ -157,9 +157,11 @@ struct LirenaFrame
 
 	MetaData metaData;
 
-	LirenaStreamer_CudaFrameData cudaFrameData;
-
 	//TODO put frame (ximea)data/(gst)buffer(s) in here
+	
+	LirenaCudaFrame cudaFrame;
+
+	void* rawImagePtr = 0;
 
 };
 
@@ -214,7 +216,7 @@ public:
 		];
 		int currentFrameBufferPoolIndex = 0;
 
-		//TODO put gstreamer Element objects here
+
 };
 
 
