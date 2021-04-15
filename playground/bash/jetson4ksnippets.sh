@@ -1,3 +1,87 @@
+#!/bin/bash
+
+#works
+myResX=2800
+myResY=2800
+
+myResX=2048
+myResY=2048
+
+myFPS=25
+
+
+# NOT works
+#myResX=4096
+#myResY=2160
+#myResX=3840
+#myResY=2160
+
+GST_DEBUG=2 \
+gst-launch-1.0 \
+    videotestsrc num-buffers=100 pattern=ball do-timestamp=true !  \
+        "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    tee name=myTee1  \
+    \
+    myTee1. ! \
+    queue ! \
+    videoconvert ! \
+    videoscale ! \
+        "video/x-raw,width=1024,height=1024,framerate=${myFPS}/1" ! \
+    xvimagesink \
+    
+
+echo finish
+sleep 1
+
+exit 0
+
+GST_DEBUG=2 gst-launch-1.0 playbin uri=file://$(pwd)/a.mp4
+
+    \
+    myTee1. ! \
+    queue max-size-bytes=1000000000 ! \
+    nvvidconv ! \
+        "video/x-raw(memory:NVMM),format=I420,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    queue max-size-bytes=1000000000 ! \
+    nvv4l2h264enc ! \
+    h264parse ! \
+    filesink location=a.mp4 \
+    
+
+
+
+
+ ##############################
+
+#works
+myResX=2800
+myResY=2800
+myFPS=25
+
+
+# NOT works
+#myResX=4096
+#myResY=2160
+#myResX=3840
+#myResY=2160
+
+GST_DEBUG=2 \
+gst-launch-1.0 \
+    videotestsrc num-buffers=25 !  \
+        "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    queue max-size-bytes=1000000000 ! \
+    nvvidconv ! \
+        "video/x-raw(memory:NVMM),format=I420,width=${myResX},height=${myResY}" ! \
+    queue max-size-bytes=1000000000 ! \
+    nvv4l2h264enc ! \
+    h264parse ! \
+    filesink location=a.mp4
+
+GST_DEBUG=2 gst-launch-1.0 playbin uri=file://$(pwd)/a.mp4
+
+exit 0
+
+
 # ximae cam res: 5328 4608
 # half res:2664 2304
 GST_DEBUG=2 \
