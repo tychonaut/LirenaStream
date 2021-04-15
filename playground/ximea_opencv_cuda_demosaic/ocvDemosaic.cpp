@@ -18,6 +18,8 @@
 
 //set to 0 to get rid of overhead of setting up the GUI/showing the image
 #define DO_SHOW_IMAGE 1
+
+
 // don't let RAM overflow and let latency explode unrecoverably,
 // rather skip frames
 // "2" works for 2k@140FPS, but there is some jam in the beginning.
@@ -432,7 +434,7 @@ int main()
         //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
         
         //only show every nth frame:
-        if(globalAppState.cuda_processed_frame_count % 3 == 0)
+        //if(globalAppState.cuda_processed_frame_count % 3 == 0)
         {
             //block for show:
             globalAppState.cudaDemoisaicStream.waitForCompletion();
