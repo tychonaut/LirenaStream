@@ -339,21 +339,30 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			   // Video appsrc, encode h264, to muxer:
 			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=streamViewer ! "
 			   ""
-			//    //{ software debayering by GStreamer itself
-			//    //: TODO outsource to Cuda&OpenCV
-			//    "   video/x-bayer ! "
-			//    " bayer2rgb ! "
-			//    "   video/x-raw, format=(string)BGRx ! "
+			   //{ software debayering by GStreamer itself
+			   //: TODO outsource to Cuda&OpenCV
+			   "   video/x-bayer ! "
+			   " bayer2rgb ! "
+			   "   video/x-raw, format=(string)BGRx ! "
+			   
+			   //{ software scaling: works with very low fps
 			   " videoconvert ! "
 			   ""
 			   //temporary hack: software-scale image to 4096**2
 			   " videoscale add-borders=TRUE  ! "
 			   //"   video/x-raw, width=4096 height=4096 ! "
-			   "   video/x-raw, width=128, height=128 ! "
+			   //"   video/x-raw, width=128, height=128 ! "
+
+
+ 				// " nvvidconv ! "
 
 			   "xvimagesink"
 			   ""
-			   //}
+
+//" video/x-raw(memory:NVMM), format=(string)I420 ! "
+
+
+			       //} // software debayer
 
 			//    " %s " // optional fork to local display
 			//    " queue ! "
@@ -504,28 +513,28 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 				if (image.frm == XI_RAW8)
 				{
 					// old raw stuff w/o debayering
-				    printf("DEBUG: GRAY8\n");
-					appsrc_video_caps = gst_caps_new_simple(
-							"video/x-raw",
-							"format", G_TYPE_STRING, "GRAY8",
-							"bpp", G_TYPE_INT, 8,
-							"depth", G_TYPE_INT, 8,
-							"framerate", GST_TYPE_FRACTION, 0, 1,
-							"width", G_TYPE_INT, image.width,
-							"height", G_TYPE_INT, image.height,
-							NULL);
+				    // printf("DEBUG: GRAY8\n");
+					// appsrc_video_caps = gst_caps_new_simple(
+					// 		"video/x-raw",
+					// 		"format", G_TYPE_STRING, "GRAY8",
+					// 		"bpp", G_TYPE_INT, 8,
+					// 		"depth", G_TYPE_INT, 8,
+					// 		"framerate", GST_TYPE_FRACTION, 0, 1,
+					// 		"width", G_TYPE_INT, image.width,
+					// 		"height", G_TYPE_INT, image.height,
+					// 		NULL);
 					
 
-					// printf("DEBUG: Appsrc has bayer caps!;\n");
-					// appsrc_video_caps = gst_caps_new_simple(
-					// 	"video/x-bayer",
-					// 	"format", G_TYPE_STRING, "bggr",
-					// 	"bpp", G_TYPE_INT, 8,
-					// 	"depth", G_TYPE_INT, 8,
-					// 	"framerate", GST_TYPE_FRACTION, 0, 1,
-					// 	"width", G_TYPE_INT, image.width,
-					// 	"height", G_TYPE_INT, image.height,
-					// 	NULL);
+					printf("DEBUG: Appsrc has bayer caps!;\n");
+					appsrc_video_caps = gst_caps_new_simple(
+						"video/x-bayer",
+						"format", G_TYPE_STRING, "bggr",
+						"bpp", G_TYPE_INT, 8,
+						"depth", G_TYPE_INT, 8,
+						"framerate", GST_TYPE_FRACTION, 0, 1,
+						"width", G_TYPE_INT, image.width,
+						"height", G_TYPE_INT, image.height,
+						NULL);
 				}
 				else if (image.frm == XI_RGB32)
 				{

@@ -189,6 +189,10 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 			gtk_range_get_adjustment(GTK_RANGE(widgets->exp)),
 			appPtr->config.exposure_ms);
 
+
+		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_DOWNSAMPLING, XI_DWN_2x2);
+
+
 		if (pthread_create(&appPtr->streamer.captureThread,
 						   NULL, lirena_XimeaStreamer_captureThread_run, (void *)appPtr))
 		{
