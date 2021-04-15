@@ -3,9 +3,9 @@
 myResX=3840
 myResY=3840
 
-myFPS=2
+myFPS=8
 
-numtotalFrames=4
+numtotalFrames=32
 
 # NOT works
 #myResX=4096
@@ -15,7 +15,7 @@ numtotalFrames=4
 
 GST_DEBUG=2 \
 gst-launch-1.0 \
-    videotestsrc num-buffers=${numtotalFrames} pattern=ball do-timestamp=true !  \
+    videotestsrc num-buffers=${numtotalFrames} pattern=blink do-timestamp=true !  \
         "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
     tee name=myTee1  \
     \
@@ -27,6 +27,7 @@ gst-launch-1.0 \
     \
     myTee1. ! \
     nvvidconv ! \
+    queue ! \
     queue max-size-bytes=1000000000 ! \
     nvv4l2h264enc ! \
     h264parse ! \
@@ -35,10 +36,10 @@ gst-launch-1.0 \
     tsparse ! \
     filesink location=a.mpg \
     
-GST_DEBUG=2 gst-launch-1.0 playbin uri=file://$(pwd)/a.mpg
     
 exit 0
 
+GST_DEBUG=2 gst-launch-1.0 playbin uri=file://$(pwd)/a.mpg
         "video/x-raw(memory:NVMM),format=I420,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
     queue max-size-bytes=1000000000 ! \
 
