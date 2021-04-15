@@ -1,8 +1,11 @@
 #include <m3api/xiApi.h>
+
 #include <iostream>
+
 #include <opencv2/highgui.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudaarithm.hpp>
+#include "opencv2/cudawarping.hpp" //cuda::resize
 #include <cuda_runtime.h>
 
 #include <sys/time.h>
@@ -18,6 +21,11 @@
 
 //set to 0 to get rid of overhead of setting up the GUI/showing the image
 #define DO_SHOW_IMAGE 1
+
+
+#define RESIZED_WIDTH 2048
+#define RESIZED_HEIGHT 2048
+
 // don't let RAM overflow and let latency explode unrecoverably,
 // rather skip frames
 // "2" works for 2k@140FPS, but there is some jam in the beginning.
@@ -56,6 +64,7 @@ struct CudaFrameData
     
     cuda::GpuMat gpuRawMatrix;   // OpenCV+Cuda-representation of XIMEA image
     cuda::GpuMat gpuColorMatrix; // debayered result image
+    cuda::GpuMat gpuResizedColorMatrix; // debayered and resized result image
 };
 
 // init to zeros/false via memset
@@ -147,7 +156,7 @@ int main()
   HANDLE xiH = NULL;
   XI_RETURN stat = XI_OK;
 
-  // Simplyfied error handling (just for demonstration)
+  // Simplyfied error handling (just for demonstration)downsampling_rate
   try
   {
     int cfa = 0;
@@ -194,7 +203,15 @@ int main()
 		throw "Not supported color filter for demosaicing.";
 	}
     }
-    
+/*    
+    //downsampling
+  	stat = 	xiSetParamInt(xiH, 
+			XI_PRM_DOWNSAMPLING, 
+			XI_DWN_2x2);
+    if (stat != XI_OK)
+      throw "Setting downsampling param failed";
+  */
+
     // Use transport data format (no processing done by the API)
     stat = xiSetParamInt(xiH, XI_PRM_IMAGE_DATA_FORMAT, XI_FRM_TRANSPORT_DATA);
     if (stat != XI_OK)
@@ -276,9 +293,14 @@ int main()
           & (globalAppState.cudaFrameDataArray[i]);
       
         currentCudaFrameData->gpuRawMatrix = 
-          cuda::GpuMat(height, width, CV_8UC1);  
+          cuda::GpuMat(height, width, CV_8UC1);
+
         currentCudaFrameData->gpuColorMatrix =
           cuda::GpuMat(height, width, CV_8UC3);
+
+        currentCudaFrameData->gpuResizedColorMatrix =
+          cuda::GpuMat(RESIZED_WIDTH, RESIZED_HEIGHT, CV_8UC3);
+
       }
     //}
 
@@ -384,6 +406,22 @@ int main()
         globalAppState.cudaDemoisaicStream );
      
         
+
+
+
+      //resize(InputArray src, OutputArray dst, Size dsize, double fx=0, double fy=0, int interpolation = INTER_LINEAR, Stream& stream = Stream::Null());
+      cuda::resize(
+        currentCudaFrameData->gpuColorMatrix,
+        currentCudaFrameData->gpuResizedColorMatrix,
+        Size(RESIZED_WIDTH, RESIZED_HEIGHT), 0, 0, 
+        INTER_LINEAR,
+        globalAppState.cudaDemoisaicStream
+      );
+
+
+
+
+
       // Apply static white balance by multiplying the channels
       //cuda::multiply(gpu_mat_color, cv::Scalar(WB_BLUE, WB_GREEN, WB_RED), gpu_mat_color);
 
@@ -432,7 +470,7 @@ int main()
         //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
         
         //only show every nth frame:
-        if(globalAppState.cuda_processed_frame_count % 3 == 0)
+        if(globalAppState.cuda_processed_frame_count % 1 == 0)
         {
             //block for show:
             globalAppState.cudaDemoisaicStream.waitForCompletion();
@@ -441,7 +479,8 @@ int main()
             //cuda::GpuMat gpuColorMatrixToShow (
             //  currentCudaFrameData->gpuColorMatrix);
             
-            imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
+            //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
+            imshow("XIMEA camera", currentCudaFrameData->gpuResizedColorMatrix);
        }
      }
 
