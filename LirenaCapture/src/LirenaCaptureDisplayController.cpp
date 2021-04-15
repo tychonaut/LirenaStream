@@ -178,6 +178,10 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 			return TRUE;
 		}
 		lirenaCaptureDisplayController_setupCamParams(GTK_TOGGLE_BUTTON(widgets->raw), appPtr);
+		
+		
+		
+		
 		int isColor = 0;
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_IMAGE_IS_COLOR, &isColor);
 		if (isColor)
@@ -188,6 +192,8 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 		gtk_adjustment_set_value(
 			gtk_range_get_adjustment(GTK_RANGE(widgets->exp)),
 			appPtr->config.exposure_ms);
+
+		
 
 		if (pthread_create(&appPtr->streamer.captureThread,
 						   NULL, lirena_XimeaStreamer_captureThread_run, (void *)appPtr))
@@ -215,8 +221,21 @@ gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, Lir
 
 	if (cameraHandle != INVALID_HANDLE_VALUE)
 	{
+		bool success = true;
+		success = xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_DOWNSAMPLING_TYPE, XI_SKIPPING);
+		//g_assert(success);
+		success = xiSetParamInt(appPtr->streamer.camParams.cameraHandle, 
+			XI_PRM_DOWNSAMPLING, 
+			XI_DWN_2x2
+			//XI_DWN_4x4
+		);
+		
+
+
 		float mingain, maxgain;
-		xiSetParamInt(cameraHandle, XI_PRM_IMAGE_DATA_FORMAT, gtk_toggle_button_get_active(raw) ? XI_RAW8 : XI_RGB32);
+		success = xiSetParamInt(cameraHandle, XI_PRM_IMAGE_DATA_FORMAT, gtk_toggle_button_get_active(raw) ? XI_RAW8 : XI_RGB32);
+		
+
 		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
 		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
 		xiGetParamInt(cameraHandle, XI_PRM_WIDTH XI_PRM_INFO_MAX, &appPtr->streamer.camParams.maxcx);

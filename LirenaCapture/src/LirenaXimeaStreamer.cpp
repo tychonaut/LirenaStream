@@ -349,6 +349,10 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 			   " %s " // optional fork to local display
 			   " queue ! "
+
+				" videoscale add-borders=TRUE ! "
+ 				"   video/x-raw, width=2048, height=2048 !"
+
 			   " nvvidconv ! "
 			   " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
 			   " h264parse  disable-passthrough=true ! " //config-interval=-1  <--may be required in TCP?...
