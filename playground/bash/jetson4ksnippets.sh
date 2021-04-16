@@ -1,13 +1,52 @@
 #!/bin/bash
 
-#works
-myResX=2800
-myResY=2800
+myResX=3840
+myResY=3840
 
-myResX=2048
-myResY=2048
+myFPS=8
 
-myFPS=25
+numtotalFrames=32
+
+# NOT works
+#myResX=4096
+#myResY=2160
+#myResX=3840
+#myResY=2160
+
+GST_DEBUG=2 \
+gst-launch-1.0 \
+    videotestsrc num-buffers=${numtotalFrames} pattern=blink do-timestamp=true !  \
+        "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    tee name=myTee1  \
+    \
+    myTee1. ! \
+    queue ! \
+    nvvidconv ! \
+        "video/x-raw(memory:NVMM),width=960,height=960" ! \
+    nvoverlaysink \
+    \
+    myTee1. ! \
+    nvvidconv ! \
+    queue ! \
+    queue max-size-bytes=1000000000 ! \
+    nvv4l2h264enc ! \
+    h264parse ! \
+    mpegtsmux name=mp2ts_muxer alignment=7 \
+    mp2ts_muxer. ! \
+    tsparse ! \
+    filesink location=a.mpg \
+    
+    
+exit 0
+
+GST_DEBUG=2 gst-launch-1.0 playbin uri=file://$(pwd)/a.mpg
+        "video/x-raw(memory:NVMM),format=I420,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    queue max-size-bytes=1000000000 ! \
+
+myResX=3840
+myResY=2160
+
+myFPS=5
 
 
 # NOT works
@@ -20,20 +59,55 @@ GST_DEBUG=2 \
 gst-launch-1.0 \
     videotestsrc num-buffers=100 pattern=ball do-timestamp=true !  \
         "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
-    tee name=myTee1  \
-    \
-    myTee1. ! \
-    queue ! \
+        
+    nvvidconv ! \
+        "video/x-raw(memory:NVMM),width=960,height=540" ! \
+    nvoverlaysink \
+    
+exit 0
+
+
+
+#works
+myResX=2800
+myResY=2800
+
+myResX=2048
+myResY=2048
+
+myResX=2560
+myResY=1600
+
+myResX=3840
+myResY=2160
+
+myFPS=5
+
+
+# NOT works
+#myResX=4096
+#myResY=2160
+#myResX=3840
+#myResY=2160
+
+GST_DEBUG=2 \
+gst-launch-1.0 \
+    videotestsrc num-buffers=100 pattern=ball do-timestamp=true !  \
+        "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
     videoconvert ! \
     videoscale ! \
-        "video/x-raw,width=1024,height=1024,framerate=${myFPS}/1" ! \
+        "video/x-raw,width=512,height=512" ! \
     xvimagesink \
     
+exit 0
 
 echo finish
 sleep 1
 
-exit 0
+    tee name=myTee1  \
+    \
+    myTee1. ! \
+    queue ! \
 
 GST_DEBUG=2 gst-launch-1.0 playbin uri=file://$(pwd)/a.mp4
 
