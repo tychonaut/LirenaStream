@@ -163,105 +163,93 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 	appPtr->streamer.camParams.acquire = gtk_toggle_button_get_active(run);
 	if (appPtr->streamer.camParams.acquire && appPtr->streamer.camParams.cameraHandle == INVALID_HANDLE_VALUE)
 	{
-		DWORD nIndex = 0;
-		char *env = getenv("CAM_INDEX");
-		if (env)
-		{
-			nIndex = atoi(env);
-		}
-		DWORD tmp;
-		xiGetNumberDevices(&tmp); //rescan available devices
-		if (xiOpenDevice(nIndex, &appPtr->streamer.camParams.cameraHandle) != XI_OK)
-		{
-			printf("Couldn't setup camera!\n");
-			appPtr->streamer.camParams.acquire = FALSE;
-			return TRUE;
-		}
+		lirena_XimeaStreamer_openCamera(&appPtr->streamer);
 
 
 
 
-		//{ downsample
-
-		XI_RETURN xiStatus = XI_OK;
 
 
-		// set downsampling "resolution" : XI_DWN_2x2 <-- half resolution
-		xiStatus = xiSetParamInt(
-			appPtr->streamer.camParams.cameraHandle, 
-			XI_PRM_DOWNSAMPLING, 
-			XI_DWN_2x2
-			//XI_DWN_4x4
-		);
-		if(xiStatus != XI_OK)
-		{
-			printf("ximea downsampling XI_DWN_2x2: binning: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
+		// //{ downsample
+		// XI_RETURN xiStatus = XI_OK;
 
 
-
-		// downsampling mode to binning:
-		xiStatus = xiSetParamInt(
-			appPtr->streamer.camParams.cameraHandle, 
-			XI_PRM_DOWNSAMPLING_TYPE, 
-			//XI_SKIPPING
-			XI_BINNING
-		);
-		if(xiStatus != XI_OK)
-		{
-			printf("ximea downsampling type XI_PRM_DOWNSAMPLING_TYPE: XI_BINNING: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
-
-
-	    // binning mode to PRESERVE BAYER PATTERN (!!!111)
-		xiStatus = xiSetParamInt(
-			appPtr->streamer.camParams.cameraHandle,
-			XI_PRM_BINNING_HORIZONTAL_PATTERN, 
-			XI_BIN_BAYER
-		);
-		if(xiStatus != XI_OK)
-		{
-			printf("XI_PRM_BINNING_HORIZONTAL_PATTERN: XI_BIN_BAYER: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
-		xiStatus = xiSetParamInt(
-			appPtr->streamer.camParams.cameraHandle,
-			XI_PRM_BINNING_VERTICAL_PATTERN, 
-			XI_BIN_BAYER
-		);
-				if(xiStatus != XI_OK)
-		{
-			printf("XI_PRM_BINNING_VERTICAL_PATTERN: XI_BIN_BAYER: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
+		// // set downsampling "resolution" : XI_DWN_2x2 <-- half resolution
+		// xiStatus = xiSetParamInt(
+		// 	appPtr->streamer.camParams.cameraHandle, 
+		// 	XI_PRM_DOWNSAMPLING, 
+		// 	XI_DWN_2x2
+		// 	//XI_DWN_4x4
+		// );
+		// if(xiStatus != XI_OK)
+		// {
+		// 	GST_WARNING("ximea downsampling XI_DWN_2x2: binning: return value not XI_OK: %d", xiStatus);
+		// 	sleep(4);
+		// }
 
 
 
-		xiStatus = xiSetParamInt(
-			appPtr->streamer.camParams.cameraHandle,
-			XI_PRM_BINNING_HORIZONTAL_MODE, 
-			XI_BIN_MODE_AVERAGE
-		);
-		if(xiStatus != XI_OK)
-		{
-			printf("ximea downsampling(binning) mode horiz.: XI_BIN_MODE_AVERAGE: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
-		xiStatus = xiSetParamInt(
-			appPtr->streamer.camParams.cameraHandle,
-			XI_PRM_BINNING_VERTICAL_MODE, 
-			XI_BIN_MODE_AVERAGE
-		);
-		if(xiStatus != XI_OK)
-		{
-			printf("ximea downsampling(binning) mode vert.: XI_BIN_MODE_AVERAGE: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
+		// // downsampling mode to binning:
+		// xiStatus = xiSetParamInt(
+		// 	appPtr->streamer.camParams.cameraHandle, 
+		// 	XI_PRM_DOWNSAMPLING_TYPE, 
+		// 	//XI_SKIPPING
+		// 	XI_BINNING
+		// );
+		// if(xiStatus != XI_OK)
+		// {
+		// 	GST_WARNING("ximea downsampling type XI_PRM_DOWNSAMPLING_TYPE: XI_BINNING: return value not XI_OK: %d", xiStatus);
+		// 	sleep(4);
+		// }
 
 
-		//} downsample
+	    // // binning mode to PRESERVE BAYER PATTERN (!!!111)
+		// xiStatus = xiSetParamInt(
+		// 	appPtr->streamer.camParams.cameraHandle,
+		// 	XI_PRM_BINNING_HORIZONTAL_PATTERN, 
+		// 	XI_BIN_BAYER
+		// );
+		// if(xiStatus != XI_OK)
+		// {
+		// 	GST_WARNING("XI_PRM_BINNING_HORIZONTAL_PATTERN: XI_BIN_BAYER: return value not XI_OK: %d", xiStatus);
+		// 	sleep(4);
+		// }
+		// xiStatus = xiSetParamInt(
+		// 	appPtr->streamer.camParams.cameraHandle,
+		// 	XI_PRM_BINNING_VERTICAL_PATTERN, 
+		// 	XI_BIN_BAYER
+		// );
+		// 		if(xiStatus != XI_OK)
+		// {
+		// 	GST_WARNING("XI_PRM_BINNING_VERTICAL_PATTERN: XI_BIN_BAYER: return value not XI_OK: %d", xiStatus);
+		// 	sleep(4);
+		// }
+
+
+
+		// xiStatus = xiSetParamInt(
+		// 	appPtr->streamer.camParams.cameraHandle,
+		// 	XI_PRM_BINNING_HORIZONTAL_MODE, 
+		// 	XI_BIN_MODE_AVERAGE
+		// );
+		// if(xiStatus != XI_OK)
+		// {
+		// 	GST_WARNING("ximea downsampling(binning) mode horiz.: XI_BIN_MODE_AVERAGE: return value not XI_OK: %d", xiStatus);
+		// 	sleep(4);
+		// }
+		// xiStatus = xiSetParamInt(
+		// 	appPtr->streamer.camParams.cameraHandle,
+		// 	XI_PRM_BINNING_VERTICAL_MODE, 
+		// 	XI_BIN_MODE_AVERAGE
+		// );
+		// if(xiStatus != XI_OK)
+		// {
+		// 	GST_WARNING("ximea downsampling(binning) mode vert.: XI_BIN_MODE_AVERAGE: return value not XI_OK: %d", xiStatus);
+		// 	sleep(4);
+		// }
+
+
+		// //} downsample
 
 
 
@@ -272,10 +260,13 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 		int isColor = 0;
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_IMAGE_IS_COLOR, &isColor);
 		if (isColor)
+		{
 			xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_AUTO_WB, 1);
-
+		}
+		
 		// set exposure from CLI arg
 		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_EXPOSURE, 1000 * appPtr->config.exposure_ms);
+
 		gtk_adjustment_set_value(
 			gtk_range_get_adjustment(GTK_RANGE(widgets->exp)),
 			appPtr->config.exposure_ms);
@@ -308,6 +299,7 @@ gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, Lir
 	{
 		float mingain, maxgain;
 		xiSetParamInt(cameraHandle, XI_PRM_IMAGE_DATA_FORMAT, gtk_toggle_button_get_active(raw) ? XI_RAW8 : XI_RGB32);
+
 		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
 		xiGetParamFloat(cameraHandle, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
 		xiGetParamInt(cameraHandle, XI_PRM_WIDTH XI_PRM_INFO_MAX, &appPtr->streamer.camParams.maxcx);
@@ -340,10 +332,14 @@ gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, Lir
 
 		//xiSetParamFloat(cameraHandle, XI_PRM_GAIN, mingain);
 		xiSetParamFloat(cameraHandle, XI_PRM_GAIN, midgain);
-		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_X, appPtr->streamer.camParams.roix0);
-		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_Y, appPtr->streamer.camParams.roiy0);
-		xiSetParamInt(cameraHandle, XI_PRM_WIDTH,    appPtr->streamer.camParams.roicx);
-		xiSetParamInt(cameraHandle, XI_PRM_HEIGHT, appPtr->streamer.camParams.roicy);
+
+
+		// NO ROI
+		// xiSetParamInt(cameraHandle, XI_PRM_OFFSET_X, appPtr->streamer.camParams.roix0);
+		// xiSetParamInt(cameraHandle, XI_PRM_OFFSET_Y, appPtr->streamer.camParams.roiy0);
+		// xiSetParamInt(cameraHandle, XI_PRM_WIDTH,    appPtr->streamer.camParams.roicx);
+		// xiSetParamInt(cameraHandle, XI_PRM_HEIGHT, appPtr->streamer.camParams.roicy);
+
 		//exposure doesn't seem to be affected by format change
 	}
 	return TRUE;
@@ -364,16 +360,16 @@ gboolean lirenaCaptureDisplayController_initCamButtonSensitivity(LirenaCaptureAp
 	if (appPtr->streamer.camParams.acquire &&
 	    appPtr->streamer.camParams.cameraHandle != INVALID_HANDLE_VALUE)
 	{
-		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 1);
+		//xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 1);
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.gpi1), level);
-		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 2);
+		//xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 2);
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.gpi2), level);
-		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 3);
+		//xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 3);
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.gpi3), level);
-		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 4);
+		//xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_SELECTOR, 4);
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_GPI_LEVEL, &level);
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(appPtr->localDisplayCtrl.widgets.gpi4), level);
 	}
@@ -499,7 +495,7 @@ gboolean update_x0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //
 		cam->roix0 = cam->maxcx - cam->roicx;
 		gtk_adjustment_set_value(adj, cam->roix0);
 	}
-	xiSetParamInt(cam->cameraHandle, XI_PRM_OFFSET_X, cam->roix0);
+	//xiSetParamInt(cam->cameraHandle, XI_PRM_OFFSET_X, cam->roix0);
 	return TRUE;
 }
 
@@ -511,7 +507,7 @@ gboolean update_y0(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //
 		cam->roiy0 = cam->maxcy - cam->roicy;
 		gtk_adjustment_set_value(adj, cam->roiy0);
 	}
-	xiSetParamInt(cam->cameraHandle, XI_PRM_OFFSET_Y, cam->roiy0);
+	//xiSetParamInt(cam->cameraHandle, XI_PRM_OFFSET_Y, cam->roiy0);
 	return TRUE;
 }
 
@@ -523,7 +519,7 @@ gboolean update_cx(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //
 		cam->roicx = cam->maxcx - cam->roix0;
 		gtk_adjustment_set_value(adj, cam->roicx);
 	}
-	xiSetParamInt(cam->cameraHandle, XI_PRM_WIDTH, cam->roicx);
+	//xiSetParamInt(cam->cameraHandle, XI_PRM_WIDTH, cam->roicx);
 	return TRUE;
 }
 
@@ -535,7 +531,7 @@ gboolean update_cy(GtkAdjustment *adj, LirenaXimeaStreamer_CameraParams *cam) //
 		cam->roicy = cam->maxcy - cam->roiy0;
 		gtk_adjustment_set_value(adj, cam->roicy);
 	}
-	xiSetParamInt(cam->cameraHandle, XI_PRM_HEIGHT, cam->roicy);
+	//xiSetParamInt(cam->cameraHandle, XI_PRM_HEIGHT, cam->roicy);
 	return TRUE;
 }
 

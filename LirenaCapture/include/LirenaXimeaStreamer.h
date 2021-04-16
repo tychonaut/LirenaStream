@@ -176,6 +176,7 @@ struct LirenaXimeaStreamer
 gboolean lirena_XimeaStreamer_openCamera(
 	LirenaXimeaStreamer* streamer
 );
+
 gboolean lirena_XimeaStreamer_setupCamParams(
 	LirenaXimeaStreamer_CameraParams* camParams,
 	LirenaConfig const * config

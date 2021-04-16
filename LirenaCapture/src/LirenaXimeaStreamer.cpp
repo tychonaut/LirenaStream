@@ -15,6 +15,82 @@
 
 
 
+
+
+bool lirena_setDownsamplingParams(HANDLE xiH)
+{
+		
+	XI_RETURN xiStatus = XI_OK;
+
+	const int decimationMultiplierToSet = 4;
+
+
+    //"decimation"
+    int decimation_selector = 0;
+    xiGetParamInt(xiH, XI_PRM_DECIMATION_SELECTOR, &decimation_selector);
+    // is 0 (XI_DEC_SELECT_SENSOR), despite api saying 1  
+    printf("previous XI_PRM_DECIMATION_SELECTOR: %d\n",decimation_selector); 
+    xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_SELECTOR, 
+      XI_DEC_SELECT_SENSOR  // no error, but not works
+      //XI_BIN_SELECT_DEVICE_FPGA  //<-- returns XI_PARAM_NOT_SETTABLE             =114
+      //XI_BIN_SELECT_HOST_CPU
+    );
+    if(xiStatus != XI_OK)
+		{
+			printf(" XI_PRM_DECIMATION_SELECTOR, XI_DEC_SELECT_SENSOR: return value not XI_OK: %d\n", xiStatus);
+			sleep(4);
+		}
+
+
+    int decimation_pattern = 0;
+    int decimation_multiplier = 0;
+
+
+    xiGetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL_PATTERN, &decimation_pattern);
+    printf("previous XI_PRM_DECIMATION_VERTICAL_PATTERN: %d\n",decimation_pattern); 
+    xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL_PATTERN, XI_DEC_BAYER);
+    if(xiStatus != XI_OK)
+		{
+			printf(" XI_PRM_DECIMATION_VERTICAL_PATTERN, XI_DEC_BAYER: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+    xiGetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, &decimation_multiplier);
+    printf("previous XI_PRM_DECIMATION_VERTICAL multiplier: %d\n",decimation_multiplier); 
+    xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, decimationMultiplierToSet);
+    if(xiStatus != XI_OK)
+		{
+			printf(" XI_PRM_DECIMATION_VERTICAL := %d: return value not XI_OK: %d", decimationMultiplierToSet, xiStatus);
+			sleep(4);
+		}
+
+
+
+    xiGetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL_PATTERN, &decimation_pattern);
+    printf("previous XI_PRM_DECIMATION_HORIZONTAL_PATTERN: %d\n",decimation_pattern); 
+    xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL_PATTERN, XI_DEC_BAYER);
+    if(xiStatus != XI_OK)
+		{
+			printf(" XI_PRM_DECIMATION_HORIZONTAL_PATTERN, XI_DEC_BAYER: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+    xiGetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, &decimation_multiplier);
+    printf("previous XI_PRM_DECIMATION_HORIZONTAL multiplier: %d\n",decimation_multiplier); 
+    xiSetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, decimationMultiplierToSet);
+    if(xiStatus != XI_OK)
+		{
+			printf(" XI_PRM_DECIMATION_HORIZONTAL := %d: return value not XI_OK: %d", decimationMultiplierToSet,xiStatus);
+			sleep(4);
+		}
+
+
+    return xiStatus == XI_OK;
+
+}
+
+
+
+
+
 gboolean lirena_XimeaStreamer_openCamera(
 	LirenaXimeaStreamer* streamer
 )
@@ -42,6 +118,9 @@ gboolean lirena_XimeaStreamer_openCamera(
 			streamer->camParams.acquire = FALSE;
 			return FALSE; //TRUE in original ximea code 0o ...
 		}
+
+
+		lirena_setDownsamplingParams(streamer->camParams.cameraHandle);
 
 	}
 
@@ -85,10 +164,10 @@ gboolean lirena_XimeaStreamer_setupCamParams(
 		xiSetParamFloat(cameraHandle, XI_PRM_GAIN, midgain);
 
 		//make sure the cam does no cropping
-		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_X, camParams->roix0);
-		xiSetParamInt(cameraHandle, XI_PRM_OFFSET_Y, camParams->roiy0);
-		xiSetParamInt(cameraHandle, XI_PRM_WIDTH,    camParams->roicx);
-		xiSetParamInt(cameraHandle, XI_PRM_HEIGHT, camParams->roicy);
+		// xiSetParamInt(cameraHandle, XI_PRM_OFFSET_X, camParams->roix0);
+		// xiSetParamInt(cameraHandle, XI_PRM_OFFSET_Y, camParams->roiy0);
+		// xiSetParamInt(cameraHandle, XI_PRM_WIDTH,    camParams->roicx);
+		// xiSetParamInt(cameraHandle, XI_PRM_HEIGHT, camParams->roicy);
 		
 
 		// white balance param..unused by us, as we debayer ourselves
@@ -165,7 +244,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 
 	unsigned long curtime, prevtime;
 	unsigned long firsttime = getcurus();
-	GstClockTime gst_defaultClock_prevTime = 0;
+	//GstClockTime gst_defaultClock_prevTime = 0;
 
 	XI_IMG_FORMAT prev_format = XI_RAW8;
 	XI_IMG image;
@@ -402,7 +481,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 	firsttime = getcurus();
 	prevtime = getcurus();
 
-	gst_defaultClock_prevTime = GST_ELEMENT(pipeline)->base_time;
+	//gst_defaultClock_prevTime = GST_ELEMENT(pipeline)->base_time;
 
 	while (appPtr->streamer.camParams.acquire)
 	{
@@ -602,12 +681,12 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			guint64 myPTS_timestamp = abs_time - base_time;
 			GST_DEBUG("myPTS_timestamp: %lu", myPTS_timestamp);
 
-			//just test
-			guint64 myDuration = // abs_time - gst_defaultClock_prevTime;
-				gst_util_uint64_scale_int(
-					1, appPtr->config.exposure_ms * GST_MSECOND, 1);
+			// //just test
+			// guint64 myDuration = // abs_time - gst_defaultClock_prevTime;
+			// 	gst_util_uint64_scale_int(
+			// 		1, appPtr->config.exposure_ms * GST_MSECOND, 1);
 			//update for next frame
-			gst_defaultClock_prevTime = abs_time;
+			//Bgst_defaultClock_prevTime = abs_time;
 
 			GST_BUFFER_PTS(video_frame_GstBuffer) = myPTS_timestamp;
 			//GST_BUFFER_DURATION (video_frame_GstBuffer) = myDuration;
@@ -639,7 +718,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 				(guint8 const *)test16byteString // guint8 * value_ptr
 			);
 
-			// Write frame count KLV_KEY_image_frame_number
+			// Write frame count KLV_KEY_image_frame_number	
 			uint64_t value_be = htobe64((uint64_t)frames);
 			klv_data_end_ptr = write_KLV_item(
 				klv_data_end_ptr,					 // guint8 * klv_buffer,
@@ -735,7 +814,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			}
 			else
 			{
-				GST_INFO(statistics_string);
+				GST_INFO("%s", statistics_string);
 			}
 
 			prevframes = frames;
