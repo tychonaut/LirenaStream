@@ -177,6 +177,41 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 			appPtr->streamer.camParams.acquire = FALSE;
 			return TRUE;
 		}
+
+
+
+
+		XI_RETURN xiStatus = XI_OK;
+
+		//{ downsample
+		xiStatus = xiSetParamInt(
+			appPtr->streamer.camParams.cameraHandle, 
+			XI_PRM_DOWNSAMPLING, 
+			XI_DWN_2x2
+		);
+
+		if(xiStatus != XI_OK)
+		{
+			GST_WARNING("ximea downasmpling XI_DWN_2x2: skipping: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+
+		xiStatus = xiSetParamInt(
+			appPtr->streamer.camParams.cameraHandle, 
+			XI_PRM_DOWNSAMPLING_TYPE, 
+			XI_SKIPPING);
+
+		if(xiStatus != XI_OK)
+		{
+			GST_WARNING("ximea downasmpling type: skipping: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+		//} downsample
+
+
+
+
+
 		lirenaCaptureDisplayController_setupCamParams(GTK_TOGGLE_BUTTON(widgets->raw), appPtr);
 		int isColor = 0;
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_IMAGE_IS_COLOR, &isColor);
@@ -190,7 +225,7 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 			appPtr->config.exposure_ms);
 
 
-		xiSetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_DOWNSAMPLING, XI_DWN_2x2);
+
 
 
 		if (pthread_create(&appPtr->streamer.captureThread,
