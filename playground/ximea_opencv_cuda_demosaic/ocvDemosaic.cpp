@@ -146,8 +146,77 @@ bool setDownsamplingParams(HANDLE xiH)
 		XI_RETURN xiStatus = XI_OK;
 
 
+    //"decimation"
+    int decimation_selector = 0;
+    xiGetParamInt(xiH, XI_PRM_DECIMATION_SELECTOR, &decimation_selector);
+    // is 0 (XI_DEC_SELECT_SENSOR), despite api saying 1  
+    printf("previous XI_PRM_DECIMATION_SELECTOR: %d\n",decimation_selector); 
+    xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_SELECTOR, 
+      XI_DEC_SELECT_SENSOR  // no error, but not works
+      //XI_BIN_SELECT_DEVICE_FPGA  //<-- returns XI_PARAM_NOT_SETTABLE             =114
+      //XI_BIN_SELECT_HOST_CPU
+    );
+    if(xiStatus != XI_OK)
+		{
+			printf(" XI_PRM_DECIMATION_SELECTOR, XI_BIN_SELECT_DEVICE_FPGA: return value not XI_OK: %d\n", xiStatus);
+			sleep(4);
+		}
 
 
+
+    int decimation_pattern = 0;
+    int decimation_multiplier = 0;
+
+
+    xiGetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL_PATTERN, &decimation_pattern);
+    printf("previous XI_PRM_DECIMATION_VERTICAL_PATTERN: %d\n",decimation_pattern); 
+    xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL_PATTERN, XI_DEC_BAYER);
+    if(xiStatus != XI_OK)
+		{
+			printf(" XI_PRM_DECIMATION_VERTICAL_PATTERN, XI_DEC_BAYER: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+    xiGetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, &decimation_multiplier);
+    printf("previous XI_PRM_DECIMATION_VERTICAL multiplier: %d\n",decimation_multiplier); 
+    xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, 2);
+    if(xiStatus != XI_OK)
+		{
+			printf(" XI_PRM_DECIMATION_VERTICAL := 2: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+
+
+
+    xiGetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL_PATTERN, &decimation_pattern);
+    printf("previous XI_PRM_DECIMATION_HORIZONTAL_PATTERN: %d\n",decimation_pattern); 
+    xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL_PATTERN, XI_DEC_BAYER);
+    if(xiStatus != XI_OK)
+		{
+			printf(" XI_PRM_DECIMATION_HORIZONTAL_PATTERN, XI_DEC_BAYER: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+    xiGetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, &decimation_multiplier);
+    printf("previous XI_PRM_DECIMATION_HORIZONTAL multiplier: %d\n",decimation_multiplier); 
+    xiSetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, 2);
+    if(xiStatus != XI_OK)
+		{
+			printf(" XI_PRM_DECIMATION_HORIZONTAL := 2: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+
+
+
+
+
+
+
+ 
+
+
+
+
+    //ignore rest of func, tha didn't work
+    return xiStatus == XI_OK;
 
 
 		// // downsampling mode to binning:
@@ -254,6 +323,11 @@ int main()
     if (stat != XI_OK)
       throw "Opening device failed";
 
+
+
+    setDownsamplingParams(xiH);
+
+
 	  // Get type of camera color filter
     stat = xiGetParamInt(xiH, XI_PRM_COLOR_FILTER_ARRAY, &cfa);
     if (stat != XI_OK)
@@ -314,10 +388,10 @@ int main()
       
     // gain
     float mingain, maxgain;	
-	xiGetParamFloat(xiH, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
-	xiGetParamFloat(xiH, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
-	float mygain = mingain +  (maxgain - mingain) * 1.0f;
-	xiSetParamFloat(xiH, XI_PRM_GAIN, mygain);     
+    xiGetParamFloat(xiH, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
+    xiGetParamFloat(xiH, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
+    float mygain = mingain +  (maxgain - mingain) * 1.0f;
+    xiSetParamFloat(xiH, XI_PRM_GAIN, mygain);     
       
     // auto whitebalance ?
     xiSetParamInt(xiH, XI_PRM_AUTO_WB, 
@@ -327,7 +401,6 @@ int main()
       
 
 
-    setDownsamplingParams(xiH);
 
 
 
