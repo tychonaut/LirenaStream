@@ -22,7 +22,7 @@ bool lirena_setDownsamplingParams(HANDLE xiH)
 		
 	XI_RETURN xiStatus = XI_OK;
 
-	const int decimationMultiplierToSet = 4;
+	const int decimationMultiplierToSet = 1;
 
 
     //"decimation"
@@ -412,7 +412,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			   // KLV appsrc to  muxer:
 			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=klvSrc ! "
 			   "   meta/x-klv, parsed=true ! "
-			   " mpegtsmux name=mp2ts_muxer alignment=0 "
+			   " mpegtsmux name=mp2ts_muxer alignment=7 "
 			   //"  mpegtsmux."
 			   ""
 			   // Video appsrc, encode h264, to muxer:
@@ -429,6 +429,8 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			   " %s " // optional fork to local display
 			   " queue ! "
 			   " nvvidconv ! "
+			       // downsampling works
+			   "   video/x-raw(memory:NVMM),width=512,height=512 ! "
 			   " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
 			   " h264parse  disable-passthrough=true ! " //config-interval=-1  <--may be required in TCP?...
 			   " mp2ts_muxer. "
