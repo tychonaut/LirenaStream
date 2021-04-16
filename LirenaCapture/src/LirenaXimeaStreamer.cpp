@@ -452,10 +452,18 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			   " nvvidconv ! "
 			       // downsampling works
 
-			   "   video/x-raw(memory:NVMM),width=1024,height=1024 ! "
+			   //combi works for udp streaming
+			   //"   video/x-raw(memory:NVMM),width=1920,height=1200 ! "
+			   //" nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! 
+
+			   // works also without bitrate param
+			   //"   video/x-raw(memory:NVMM),width=1920,height=1200 ! "
+			   //" nvv4l2h264enc maxperf-enable=1 !" // bitrate=16000000 ! "
+
+			   "   video/x-raw(memory:NVMM),width=3840,height=2400 ! "
+			   " nvv4l2h264enc maxperf-enable=1 !" // bitrate=16000000 ! "
 
 
-			   " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
 			   " h264parse  disable-passthrough=true ! " //config-interval=-1  <--may be required in TCP?...
 			   " mp2ts_muxer. "
 			   ""

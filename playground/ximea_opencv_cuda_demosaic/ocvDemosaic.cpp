@@ -17,12 +17,12 @@
 
 
 //set to 0 to get rid of overhead of setting up the GUI/showing the image
-#define DO_SHOW_IMAGE 1
+#define DO_SHOW_IMAGE 0
 // don't let RAM overflow and let latency explode unrecoverably,
 // rather skip frames
 // "2" works for 2k@140FPS, but there is some jam in the beginning.
 // "6" works without jam for 2k@140FPS,
-#define MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 6
+#define MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 12
 #define STATUS_STRING_LENGTH 4096
 
 // Define parameters for a static white balance
@@ -176,7 +176,7 @@ bool setDownsamplingParams(HANDLE xiH)
 		}
     xiGetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, &decimation_multiplier);
     printf("previous XI_PRM_DECIMATION_VERTICAL multiplier: %d\n",decimation_multiplier); 
-    xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, 2);
+    xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, 4);
     if(xiStatus != XI_OK)
 		{
 			printf(" XI_PRM_DECIMATION_VERTICAL := 2: return value not XI_OK: %d", xiStatus);
@@ -550,7 +550,7 @@ int main()
         //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
         
         //only show every nth frame:
-        //if(globalAppState.cuda_processed_frame_count % 3 == 0)
+        if(globalAppState.cuda_processed_frame_count % 3 == 0)
         {
             //block for show:
             globalAppState.cudaDemoisaicStream.waitForCompletion();
