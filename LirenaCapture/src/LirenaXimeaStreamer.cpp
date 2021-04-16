@@ -22,7 +22,7 @@ bool lirena_setDownsamplingParams(HANDLE xiH)
 		
 	XI_RETURN xiStatus = XI_OK;
 
-	const int decimationMultiplierToSet = 1;
+	const int decimationMultiplierToSet = 2;
 
 
     //"decimation"
@@ -417,12 +417,33 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			   ""
 			   // Video appsrc, encode h264, to muxer:
 			   " appsrc format=GST_FORMAT_TIME is-live=TRUE name=streamViewer ! "
+
+						// //nope:
+						// //GST_PIPELINE grammar.y:721:gst_parse_perform_link: could not link videoscale0 to bayer2rgb0, videoscale0 can't handle caps video/x-bayer, width=(int)512, height=(int)512
+						// " videoscale add-borders=TRUE ! "
+						// "   video/x-bayer,width=512,height=512 ! "
+
+
 			   ""
 			   //{ software debayering by GStreamer itself
 			   //: TODO outsource to Cuda&OpenCV
-			   "   video/x-bayer ! "
+			   
+			   // 16fps fluid show + dump @ half res, BUT pink+moiree!
+			   //"   video/x-bayer, format=(string)bggr! "
+			   //blank image
+			   //"   video/x-bayer, format=(string)grbg! "
+			   //blank image
+			   //"   video/x-bayer, format=(string)gbrg! "
+			   //"   video/x-bayer, format=(string)rggb! "
+			   
+			   
 			   " bayer2rgb ! "
+			   
+			   // BGRx is correct when NOT ximea-decimating....
+			   //"   video/x-raw, format=(string)BGRx ! "
+			   //test:
 			   "   video/x-raw, format=(string)BGRx ! "
+			   
 			   " videoconvert ! "
 			   //}
 
@@ -430,7 +451,10 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			   " queue ! "
 			   " nvvidconv ! "
 			       // downsampling works
-			   "   video/x-raw(memory:NVMM),width=512,height=512 ! "
+
+			   "   video/x-raw(memory:NVMM),width=1024,height=1024 ! "
+
+
 			   " nvv4l2h264enc maxperf-enable=1 bitrate=8000000 ! "
 			   " h264parse  disable-passthrough=true ! " //config-interval=-1  <--may be required in TCP?...
 			   " mp2ts_muxer. "
@@ -448,7 +472,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 			   gstreamerForkString_enc_to_disk_and_UDP,
 			   gStreamerNetworkTransmissionSnippet);
 
-	GST_INFO("HERE MY PIPELINE: %s", gstreamerPipelineString);
+	GST_ERROR("HERE MY PIPELINE: %s", gstreamerPipelineString);
 	sleep(1);
 
 	pipeline = gst_parse_launch(
