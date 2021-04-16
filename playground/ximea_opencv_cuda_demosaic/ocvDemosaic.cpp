@@ -621,7 +621,7 @@ int main()
         //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
         
         //only show every nth frame:
-        if(globalAppState.cuda_processed_frame_count % 3 == 0)
+        //if(globalAppState.cuda_processed_frame_count % 3 == 0)
         {
             //block for show:
             globalAppState.cudaDemoisaicStream.waitForCompletion();
