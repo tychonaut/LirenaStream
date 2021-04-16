@@ -177,6 +177,97 @@ gboolean lirenaCaptureDisplayController_initCam_startCaptureThread(GtkToggleButt
 			appPtr->streamer.camParams.acquire = FALSE;
 			return TRUE;
 		}
+
+
+
+
+		//{ downsample
+
+		XI_RETURN xiStatus = XI_OK;
+
+
+		// set downsampling "resolution" : XI_DWN_2x2 <-- half resolution
+		xiStatus = xiSetParamInt(
+			appPtr->streamer.camParams.cameraHandle, 
+			XI_PRM_DOWNSAMPLING, 
+			XI_DWN_2x2
+			//XI_DWN_4x4
+		);
+		if(xiStatus != XI_OK)
+		{
+			printf("ximea downsampling XI_DWN_2x2: binning: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+
+
+
+		// downsampling mode to binning:
+		xiStatus = xiSetParamInt(
+			appPtr->streamer.camParams.cameraHandle, 
+			XI_PRM_DOWNSAMPLING_TYPE, 
+			//XI_SKIPPING
+			XI_BINNING
+		);
+		if(xiStatus != XI_OK)
+		{
+			printf("ximea downsampling type XI_PRM_DOWNSAMPLING_TYPE: XI_BINNING: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+
+
+	    // binning mode to PRESERVE BAYER PATTERN (!!!111)
+		xiStatus = xiSetParamInt(
+			appPtr->streamer.camParams.cameraHandle,
+			XI_PRM_BINNING_HORIZONTAL_PATTERN, 
+			XI_BIN_BAYER
+		);
+		if(xiStatus != XI_OK)
+		{
+			printf("XI_PRM_BINNING_HORIZONTAL_PATTERN: XI_BIN_BAYER: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+		xiStatus = xiSetParamInt(
+			appPtr->streamer.camParams.cameraHandle,
+			XI_PRM_BINNING_VERTICAL_PATTERN, 
+			XI_BIN_BAYER
+		);
+				if(xiStatus != XI_OK)
+		{
+			printf("XI_PRM_BINNING_VERTICAL_PATTERN: XI_BIN_BAYER: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+
+
+
+		xiStatus = xiSetParamInt(
+			appPtr->streamer.camParams.cameraHandle,
+			XI_PRM_BINNING_HORIZONTAL_MODE, 
+			XI_BIN_MODE_AVERAGE
+		);
+		if(xiStatus != XI_OK)
+		{
+			printf("ximea downsampling(binning) mode horiz.: XI_BIN_MODE_AVERAGE: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+		xiStatus = xiSetParamInt(
+			appPtr->streamer.camParams.cameraHandle,
+			XI_PRM_BINNING_VERTICAL_MODE, 
+			XI_BIN_MODE_AVERAGE
+		);
+		if(xiStatus != XI_OK)
+		{
+			printf("ximea downsampling(binning) mode vert.: XI_BIN_MODE_AVERAGE: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+
+
+		//} downsample
+
+
+
+
+
+
 		lirenaCaptureDisplayController_setupCamParams(GTK_TOGGLE_BUTTON(widgets->raw), appPtr);
 		int isColor = 0;
 		xiGetParamInt(appPtr->streamer.camParams.cameraHandle, XI_PRM_IMAGE_IS_COLOR, &isColor);

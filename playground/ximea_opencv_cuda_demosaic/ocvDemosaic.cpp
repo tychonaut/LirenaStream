@@ -137,6 +137,102 @@ void cudaDemosaicStreamCallback(int status, void *userData)
 }
 
 
+
+
+bool setDownsamplingParams(HANDLE xiH)
+{
+//{ downsample
+		
+		XI_RETURN xiStatus = XI_OK;
+
+
+
+
+
+
+		// // downsampling mode to binning:
+		// xiStatus = xiSetParamInt(
+		// 	xiH, 
+		// 	XI_PRM_DOWNSAMPLING_TYPE, 
+		// 	//XI_SKIPPING
+		// 	XI_BINNING
+		// );
+		// if(xiStatus != XI_OK)
+		// {
+		// 	printf("ximea downsampling type XI_PRM_DOWNSAMPLING_TYPE: XI_BINNING: return value not XI_OK: %d", xiStatus);
+		// 	sleep(4);
+		// }
+
+
+	    // binning mode to PRESERVE BAYER PATTERN (!!!111)
+		xiStatus = xiSetParamInt(
+			xiH,
+			XI_PRM_BINNING_HORIZONTAL_PATTERN, 
+			XI_BIN_BAYER
+		);
+		if(xiStatus != XI_OK)
+		{
+			printf("XI_PRM_BINNING_HORIZONTAL_PATTERN: XI_BIN_BAYER: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+		xiStatus = xiSetParamInt(
+			xiH,
+			XI_PRM_BINNING_VERTICAL_PATTERN, 
+			XI_BIN_BAYER
+		);
+		if(xiStatus != XI_OK)
+		{
+			printf("XI_PRM_BINNING_VERTICAL_PATTERN: XI_BIN_BAYER: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+
+
+		// set downsampling "resolution" : XI_DWN_2x2 <-- half resolution
+		xiStatus = xiSetParamInt(
+			xiH, 
+			XI_PRM_DOWNSAMPLING, 
+			XI_DWN_2x2
+			//XI_DWN_4x4
+		);
+		if(xiStatus != XI_OK)
+		{
+			printf("ximea downsampling XI_DWN_2x2: binning: return value not XI_OK: %d", xiStatus);
+			sleep(4);
+		}
+
+
+		// xiStatus = xiSetParamInt(
+		// 	xiH,
+		// 	XI_PRM_BINNING_HORIZONTAL_MODE, 
+		// 	XI_BIN_MODE_AVERAGE
+		// );
+		// if(xiStatus != XI_OK)
+		// {
+		// 	printf("ximea downsampling(binning) mode horiz.: XI_BIN_MODE_AVERAGE: return value not XI_OK: %d", xiStatus);
+		// 	sleep(4);
+		// }
+		// xiStatus = xiSetParamInt(
+		// 	xiH,
+		// 	XI_PRM_BINNING_VERTICAL_MODE, 
+		// 	XI_BIN_MODE_AVERAGE
+		// );
+		// if(xiStatus != XI_OK)
+		// {
+		// 	printf("ximea downsampling(binning) mode vert.: XI_BIN_MODE_AVERAGE: return value not XI_OK: %d", xiStatus);
+		// 	sleep(4);
+		// }
+
+
+		//} downsample 
+
+  return xiStatus == XI_OK;
+}
+
+
+
+
+
+
 int main()
 {
   // Initialize XI_IMG structure
@@ -158,41 +254,41 @@ int main()
     if (stat != XI_OK)
       throw "Opening device failed";
 
-	// Get type of camera color filter
+	  // Get type of camera color filter
     stat = xiGetParamInt(xiH, XI_PRM_COLOR_FILTER_ARRAY, &cfa);
     if (stat != XI_OK)
       throw "Could not get color filter array from camera";
 
-	// Set correct demosaicing type according to camera color filter
+	  // Set correct demosaicing type according to camera color filter
     switch (cfa) {
-	case XI_CFA_BAYER_RGGB:
-	{
-		cout << "BAYER_RGGB color filter." << endl;
-		OCVbayer = COLOR_BayerRG2BGR;
-		break;
-	}
-	case XI_CFA_BAYER_BGGR:
-	{
-		cout << "BAYER_BGGR color filter." << endl;
-		OCVbayer = COLOR_BayerBG2BGR;
-		break;
-	}
-	case XI_CFA_BAYER_GRBG:
-	{
-		cout<<"BAYER_GRBG color filter." << endl;
-		OCVbayer = COLOR_BayerGR2BGR;
-		break;
-	}
-	case XI_CFA_BAYER_GBRG:
-	{
-		cout<<"BAYER_GBRG color filter." << endl;
-		OCVbayer = COLOR_BayerGB2BGR;
-		break;
-	}
-	default:
-	{
-		throw "Not supported color filter for demosaicing.";
-	}
+    case XI_CFA_BAYER_RGGB:
+    {
+      cout << "BAYER_RGGB color filter." << endl;
+      OCVbayer = COLOR_BayerRG2BGR;
+      break;
+    }
+    case XI_CFA_BAYER_BGGR:
+    {
+      cout << "BAYER_BGGR color filter." << endl;
+      OCVbayer = COLOR_BayerBG2BGR;
+      break;
+    }
+    case XI_CFA_BAYER_GRBG:
+    {
+      cout<<"BAYER_GRBG color filter." << endl;
+      OCVbayer = COLOR_BayerGR2BGR;
+      break;
+    }
+    case XI_CFA_BAYER_GBRG:
+    {
+      cout<<"BAYER_GBRG color filter." << endl;
+      OCVbayer = COLOR_BayerGB2BGR;
+      break;
+    }
+    default:
+    {
+      throw "Not supported color filter for demosaicing.";
+    }
     }
     
     // Use transport data format (no processing done by the API)
@@ -223,9 +319,17 @@ int main()
 	float mygain = mingain +  (maxgain - mingain) * 1.0f;
 	xiSetParamFloat(xiH, XI_PRM_GAIN, mygain);     
       
-    // NO auto whitebalance!
-    xiSetParamInt(xiH, XI_PRM_AUTO_WB, 0);
+    // auto whitebalance ?
+    xiSetParamInt(xiH, XI_PRM_AUTO_WB, 
+      //0
+      XI_ON
+    );
       
+
+
+    setDownsamplingParams(xiH);
+
+
 
     // Get width of image
     int width = -1;
@@ -238,6 +342,18 @@ int main()
     stat = xiGetParamInt(xiH, XI_PRM_HEIGHT, &height);
     if (stat != XI_OK)
       throw "Could not get image height from camera";
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Start the image acquisition
     stat = xiStartAcquisition(xiH);
