@@ -141,7 +141,6 @@ void cudaDemosaicStreamCallback(int status, void *userData)
 
 bool setDownsamplingParams(HANDLE xiH)
 {
-//{ downsample
 		
 		XI_RETURN xiStatus = XI_OK;
 
@@ -158,10 +157,9 @@ bool setDownsamplingParams(HANDLE xiH)
     );
     if(xiStatus != XI_OK)
 		{
-			printf(" XI_PRM_DECIMATION_SELECTOR, XI_BIN_SELECT_DEVICE_FPGA: return value not XI_OK: %d\n", xiStatus);
+			printf(" XI_PRM_DECIMATION_SELECTOR, XI_DEC_SELECT_SENSOR: return value not XI_OK: %d\n", xiStatus);
 			sleep(4);
 		}
-
 
 
     int decimation_pattern = 0;
@@ -205,96 +203,8 @@ bool setDownsamplingParams(HANDLE xiH)
 		}
 
 
-
-
-
-
-
- 
-
-
-
-
-    //ignore rest of func, tha didn't work
     return xiStatus == XI_OK;
 
-
-		// // downsampling mode to binning:
-		// xiStatus = xiSetParamInt(
-		// 	xiH, 
-		// 	XI_PRM_DOWNSAMPLING_TYPE, 
-		// 	//XI_SKIPPING
-		// 	XI_BINNING
-		// );
-		// if(xiStatus != XI_OK)
-		// {
-		// 	printf("ximea downsampling type XI_PRM_DOWNSAMPLING_TYPE: XI_BINNING: return value not XI_OK: %d", xiStatus);
-		// 	sleep(4);
-		// }
-
-
-	    // binning mode to PRESERVE BAYER PATTERN (!!!111)
-		xiStatus = xiSetParamInt(
-			xiH,
-			XI_PRM_BINNING_HORIZONTAL_PATTERN, 
-			XI_BIN_BAYER
-		);
-		if(xiStatus != XI_OK)
-		{
-			printf("XI_PRM_BINNING_HORIZONTAL_PATTERN: XI_BIN_BAYER: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
-		xiStatus = xiSetParamInt(
-			xiH,
-			XI_PRM_BINNING_VERTICAL_PATTERN, 
-			XI_BIN_BAYER
-		);
-		if(xiStatus != XI_OK)
-		{
-			printf("XI_PRM_BINNING_VERTICAL_PATTERN: XI_BIN_BAYER: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
-
-
-		// set downsampling "resolution" : XI_DWN_2x2 <-- half resolution
-		xiStatus = xiSetParamInt(
-			xiH, 
-			XI_PRM_DOWNSAMPLING, 
-			XI_DWN_2x2
-			//XI_DWN_4x4
-		);
-		if(xiStatus != XI_OK)
-		{
-			printf("ximea downsampling XI_DWN_2x2: binning: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
-
-
-		// xiStatus = xiSetParamInt(
-		// 	xiH,
-		// 	XI_PRM_BINNING_HORIZONTAL_MODE, 
-		// 	XI_BIN_MODE_AVERAGE
-		// );
-		// if(xiStatus != XI_OK)
-		// {
-		// 	printf("ximea downsampling(binning) mode horiz.: XI_BIN_MODE_AVERAGE: return value not XI_OK: %d", xiStatus);
-		// 	sleep(4);
-		// }
-		// xiStatus = xiSetParamInt(
-		// 	xiH,
-		// 	XI_PRM_BINNING_VERTICAL_MODE, 
-		// 	XI_BIN_MODE_AVERAGE
-		// );
-		// if(xiStatus != XI_OK)
-		// {
-		// 	printf("ximea downsampling(binning) mode vert.: XI_BIN_MODE_AVERAGE: return value not XI_OK: %d", xiStatus);
-		// 	sleep(4);
-		// }
-
-
-		//} downsample 
-
-  return xiStatus == XI_OK;
 }
 
 
@@ -319,7 +229,7 @@ int main()
     int OCVbayer = 0;
 
     // Get device handle for the camera
-    stat = xiOpenDevice(0, &xiH);
+    stat =  xiOpenDevice(0, &xiH);
     if (stat != XI_OK)
       throw "Opening device failed";
 
@@ -393,12 +303,20 @@ int main()
     float mygain = mingain +  (maxgain - mingain) * 1.0f;
     xiSetParamFloat(xiH, XI_PRM_GAIN, mygain);     
       
-    // auto whitebalance ?
-    xiSetParamInt(xiH, XI_PRM_AUTO_WB, 
+
+
+    // do auto whitebalance -> sems not applied to image, 
+    // but the three multipliers are in aquried image struct (?)
+    stat = xiSetParamInt(xiH, XI_PRM_AUTO_WB, 
       //0
       XI_ON
     );
-      
+    if (stat != XI_OK)
+      throw "Setting auto white balance failed";
+
+    // xiSetParamFloat(xiH, XI_PRM_WB_KR, WB_RED);
+    // xiSetParamFloat(xiH, XI_PRM_WB_KG, WB_GREEN);
+    // xiSetParamFloat(xiH, XI_PRM_WB_KB, WB_BLUE);
 
 
 
@@ -572,9 +490,20 @@ int main()
         0, // derive channel layout from other params
         globalAppState.cudaDemoisaicStream );
      
+      //  all allways 1 even with auto wb enabled 0o
+      // printf("white balance params from ximea: %f, %f, %f\n",
+      //   image.wb_red, image.wb_green, image.wb_blue);
         
-      // Apply static white balance by multiplying the channels
-      //cuda::multiply(gpu_mat_color, cv::Scalar(WB_BLUE, WB_GREEN, WB_RED), gpu_mat_color);
+      //Apply static white balance by multiplying the channels
+      cuda::multiply(
+        currentCudaFrameData->gpuColorMatrix, 
+        cv::Scalar(WB_BLUE, WB_GREEN, WB_RED), 
+        //cv::Scalar(image.wb_red, image.wb_green, image.wb_blue), 
+        currentCudaFrameData->gpuColorMatrix,
+        1.0, 
+        -1,
+        globalAppState.cudaDemoisaicStream
+      );
 
 
    
