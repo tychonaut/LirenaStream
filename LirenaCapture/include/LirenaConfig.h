@@ -41,7 +41,7 @@ class LirenaConfig
 {
   public:
 
-  LirenaConfig(int argc, char **argv);
+  explicit LirenaConfig(int argc, char **argv);
 
   //keep to init gtk, gst etc..
   int argc;
