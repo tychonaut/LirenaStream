@@ -45,7 +45,7 @@ static struct argp_option options[] =
 
   {"targetResolutionX",      'x', "resX", 0, 
     "target resolution; may be ignored depending on capture device&mode; default:-1(auto)" },
-  {"targetResolutionX",      'y', "resY", 0, 
+  {"targetResolutionY",      'y', "resY", 0, 
     "target resolution; may be ignored depending on capture device&mode; default:-1(auto)" },
 
   {"useTCP",        't', 0,       0, 

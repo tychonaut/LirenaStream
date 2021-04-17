@@ -8,6 +8,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudaarithm.hpp>
+#include "opencv2/cudawarping.hpp" //cuda::resize
 #include <cuda_runtime.h>
 
 #include <sys/time.h>
@@ -125,6 +126,14 @@ struct CudaFrameData
     
     cuda::GpuMat gpuRawMatrix;   // OpenCV+Cuda-representation of XIMEA image
     cuda::GpuMat gpuColorMatrix; // debayered result image
+    cuda::GpuMat gpuResizedColorMatrix; // debayered and resized result image
+
+    // hack: read back from gpu to pass to gstreamer without hassle
+    // (cause despite intense search I find no workaround-free way
+    // to pass a GPU mat to a GstMemory;
+    // workarounds are using stuff like EGL frames and interopping is with cv::GPUMat;
+    //  no time for shis right now, unfortunately)
+    cv::Mat cpuResizedColorMatrix;
 };
 
 
@@ -391,8 +400,34 @@ int main(int argc, char **argv)
 
         currentCudaFrameData->gpuRawMatrix = 
           cuda::GpuMat(height, width, CV_8UC1);  
+        
         currentCudaFrameData->gpuColorMatrix =
           cuda::GpuMat(height, width, CV_8UC3);
+
+        currentCudaFrameData->gpuResizedColorMatrix =
+          cuda::GpuMat(
+            globalAppState.config.targetResolutionY > 0 
+              ? 
+              globalAppState.config.targetResolutionY
+              : height,
+            globalAppState.config.targetResolutionX > 0 
+              ? 
+              globalAppState.config.targetResolutionX
+              : width,
+            CV_8UC3);
+
+        currentCudaFrameData->cpuResizedColorMatrix =
+          cv::Mat(
+            globalAppState.config.targetResolutionY > 0 
+              ? 
+              globalAppState.config.targetResolutionY
+              : height,
+            globalAppState.config.targetResolutionX > 0 
+              ? 
+              globalAppState.config.targetResolutionX
+              : width,
+            CV_8UC3);
+
       }
     //}
 
@@ -516,7 +551,7 @@ int main(int argc, char **argv)
         globalAppState.cudaDemoisaicStream);
       //}
       
-
+      
 
 
    
@@ -548,6 +583,32 @@ int main(int argc, char **argv)
       //     globalAppState.cudaDemoisaicStream
       //   );
       // }
+
+
+      
+      //resize(InputArray src, OutputArray dst, Size dsize, double fx=0, double fy=0, int interpolation = INTER_LINEAR, Stream& stream = Stream::Null());
+      cuda::resize(
+        currentCudaFrameData->gpuColorMatrix,
+        currentCudaFrameData->gpuResizedColorMatrix,
+        Size( 
+          globalAppState.config.targetResolutionY > 0 
+            ? globalAppState.config.targetResolutionY
+            : height,
+          globalAppState.config.targetResolutionX > 0 
+            ? globalAppState.config.targetResolutionX
+            : width
+          ),
+          0, 
+          0, 
+          INTER_LINEAR,
+          globalAppState.cudaDemoisaicStream
+      );
+      
+      // //unfortunate hack to get easy-gst-compatible memory: download gpu to cpu:
+      // currentCudaFrameData->gpuResizedColorMatrix.download(
+      //   //cv::OutputArray(currentCudaFrameData->cpuResizedColorMatrix),
+      //   currentCudaFrameData->cpuResizedColorMatrix,
+      //   globalAppState.cudaDemoisaicStream);
 
    
       globalAppState.cudaDemoisaicStream.enqueueHostCallback(	
@@ -602,7 +663,10 @@ int main(int argc, char **argv)
             //cuda::GpuMat gpuColorMatrixToShow (
             //  currentCudaFrameData->gpuColorMatrix);
             
-            imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
+            imshow("XIMEA camera", 
+              //currentCudaFrameData->gpuColorMatrix
+              currentCudaFrameData->gpuResizedColorMatrix
+            );
        }
      }
 
