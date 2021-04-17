@@ -30,20 +30,47 @@ threading_dep = dependency('threads')
 gtk2_dep = dependency('gtk+-2.0')
 X11_dep = dependency('X11')
 
+
+
+#{ cv::cuda
+cuda_dep = dependency('cuda', version : '>=10', modules : ['cudart'])
+#cudart -L/usr/local/lib -L/usr/local/cuda/lib64 
+
+#set('PKG_CONFIG_PATH','/usr/local/lib/pkgconfig/opencv.pc')
+opencv_dep = dependency('opencv', version : '>=3.4', 
+                        modules : [
+                            'opencv_core',
+                            'opencv_highgui',
+                            'opencv_cudaimgproc',
+                            'opencv_cudaarithm' 
+                        ])
+#}
+
+
+
+
+
 all_deps = [
     gst_app_dep, 
     gst_video_dep,
     ximea_m3api_dep,
     ximea_dng_dep,
     threading_dep,
+    cuda_dep,
+    opencv_dep,
     gtk2_dep,
-    X11_dep
+    X11_dep,
 ]
+
 #-------------------------------------------------------------------------------
 
 install_directory = get_option('install_directory')
 
-incdir = include_directories('include')
+incdirs = include_directories(
+  'include',
+  '/usr/local/include/', 
+  '/usr/local/cuda/include'
+)
 
 
 exe_source_files = [
@@ -51,11 +78,12 @@ exe_source_files = [
   'src/LirenaConfig.cpp',
   'src/LirenaXimeaStreamer.cpp',
   'src/LirenaKLVappsrc.cpp',
-  'src/LirenaCaptureDisplayController.cpp']
+  'src/LirenaCaptureDisplayController.cpp'
+]
 
 executable('lirenaCapture',
   exe_source_files,
   install : true,
   dependencies : all_deps,
-  include_directories: incdir
+  include_directories: incdirs
 )
