@@ -1,5 +1,10 @@
+
+#include "LirenaConfig.h"
+
 #include <m3api/xiApi.h>
+
 #include <iostream>
+
 #include <opencv2/highgui.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudaarithm.hpp>
@@ -12,12 +17,41 @@
 //#include <set>
 
 
+//{Hack: too little time to use CLI args ...
+
+//set to 0 to get rid of overhead of setting up the GUI/showing the image
+//#define DO_SHOW_IMAGE 0
+#define DO_USE_SENSOR_DECIMATION 0
+#define DO_SCALE_IMAGE 1
+
+//#define DO_WHITE_BALANCE 0
+
+// Define parameters for a static white balance
+#define WB_BLUE 2
+#define WB_GREEN 1
+#define WB_RED 1.3
+
+#if DO_USE_SENSOR_DECIMATION
+# define decimationMultiplierToSet 2
+#else
+# define decimationMultiplierToSet 1
+#endif
+
+#define targetScaledResX 3840
+#define targetScaledResY 2160
+
+
+
+
+//}
+
+
+
+
+
 // Define the number of images acquired, processed and shown in this example
 #define NUMBER_OF_IMAGES 10000
 
-
-//set to 0 to get rid of overhead of setting up the GUI/showing the image
-#define DO_SHOW_IMAGE 0
 // don't let RAM overflow and let latency explode unrecoverably,
 // rather skip frames
 // "2" works for 2k@140FPS, but there is some jam in the beginning.
@@ -25,42 +59,25 @@
 #define MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 12
 #define STATUS_STRING_LENGTH 4096
 
-// Define parameters for a static white balance
-#define WB_BLUE 2
-#define WB_GREEN 1
-#define WB_RED 1.3
+
 
 using namespace cv;
 using namespace std;
 
+struct CudaFrameData;
 
-struct CudaFrameData
-{
-    CudaFrameData()
-    : bufferIndex(0),
-      slotIsUsed(false),
-      cudaHostMemory(nullptr),
-      hostRawMat()
-      //hostRawMatInputArray()
-    {}
 
-    int bufferIndex; // backtracking into ApplicationState::cudaFrameDataArray
-    // Status flag: Is data slot used by cuda right now?
-    bool slotIsUsed; 
-    
-    //pointer to CUDA host data where the Ximea captured frame is mapped to
-    void* cudaHostMemory; 
-    // wrappers for cudaHostMemory for async GPU upload
-    cv::Mat hostRawMat;
-    //cv::InputArray hostRawMatInputArray;
-    
-    cuda::GpuMat gpuRawMatrix;   // OpenCV+Cuda-representation of XIMEA image
-    cuda::GpuMat gpuColorMatrix; // debayered result image
-};
 
 // init to zeros/false via memset
-struct ApplicationState
+struct StandaloneApplicationState
 {
+    StandaloneApplicationState(int argc, char **argv)
+      : config(argc, argv)
+    {}
+
+    LirenaConfig config;
+
+
     bool doDisplayProcessedImage; //yes, not showing anything is the default
         
     // for asynchronous processing of CUDA stuff: has to be initialized
@@ -84,7 +101,32 @@ struct ApplicationState
 
 };
 
-ApplicationState globalAppState;
+struct CudaFrameData
+{
+    CudaFrameData()
+    : bufferIndex(0),
+      slotIsUsed(false),
+      cudaHostMemory(nullptr),
+      hostRawMat()
+      //hostRawMatInputArray()
+    {}
+
+    StandaloneApplicationState* appStatePtr;
+
+    int bufferIndex; // backtracking into StandaloneApplicationState::cudaFrameDataArray
+    // Status flag: Is data slot used by cuda right now?
+    bool slotIsUsed; 
+    
+    //pointer to CUDA host data where the Ximea captured frame is mapped to
+    void* cudaHostMemory; 
+    // wrappers for cudaHostMemory for async GPU upload
+    cv::Mat hostRawMat;
+    //cv::InputArray hostRawMatInputArray;
+    
+    cuda::GpuMat gpuRawMatrix;   // OpenCV+Cuda-representation of XIMEA image
+    cuda::GpuMat gpuColorMatrix; // debayered result image
+};
+
 
 
 
@@ -112,25 +154,8 @@ void cudaDemosaicStreamCallback(int status, void *userData)
       static_cast<CudaFrameData *>(userData);
      
     
-    globalAppState.cuda_processed_frame_count ++;
+    currentCudaFrameData->appStatePtr->cuda_processed_frame_count ++;
     
-    /*
-    if(DO_SHOW_IMAGE)
-    {   
-        // Render image to the screen (using OpenGL) 
-        //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
-        
-        //only show every nth frame:
-        if(globalAppState.cuda_processed_frame_count % 320 == 0)
-        {
-            //blocking copy
-            cuda::GpuMat gpuColorMatrixToShow (
-              currentCudaFrameData->gpuColorMatrix);
-            
-            imshow("XIMEA camera", gpuColorMatrixToShow);
-       }
-    }
-    */
 
     //free slot for reusal:
     currentCudaFrameData->slotIsUsed=false;
@@ -139,10 +164,13 @@ void cudaDemosaicStreamCallback(int status, void *userData)
 
 
 
-bool setDownsamplingParams(HANDLE xiH)
+
+
+
+bool lirena_setDownsamplingParams(HANDLE xiH)
 {
 		
-		XI_RETURN xiStatus = XI_OK;
+	XI_RETURN xiStatus = XI_OK;
 
 
     //"decimation"
@@ -176,10 +204,10 @@ bool setDownsamplingParams(HANDLE xiH)
 		}
     xiGetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, &decimation_multiplier);
     printf("previous XI_PRM_DECIMATION_VERTICAL multiplier: %d\n",decimation_multiplier); 
-    xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, 4);
+    xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, decimationMultiplierToSet);
     if(xiStatus != XI_OK)
 		{
-			printf(" XI_PRM_DECIMATION_VERTICAL := 2: return value not XI_OK: %d", xiStatus);
+			printf(" XI_PRM_DECIMATION_VERTICAL := %d: return value not XI_OK: %d", decimationMultiplierToSet, xiStatus);
 			sleep(4);
 		}
 
@@ -195,10 +223,10 @@ bool setDownsamplingParams(HANDLE xiH)
 		}
     xiGetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, &decimation_multiplier);
     printf("previous XI_PRM_DECIMATION_HORIZONTAL multiplier: %d\n",decimation_multiplier); 
-    xiSetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, 2);
+    xiSetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, decimationMultiplierToSet);
     if(xiStatus != XI_OK)
 		{
-			printf(" XI_PRM_DECIMATION_HORIZONTAL := 2: return value not XI_OK: %d", xiStatus);
+			printf(" XI_PRM_DECIMATION_HORIZONTAL := %d: return value not XI_OK: %d", decimationMultiplierToSet,xiStatus);
 			sleep(4);
 		}
 
@@ -212,8 +240,11 @@ bool setDownsamplingParams(HANDLE xiH)
 
 
 
-int main()
+
+int main(int argc, char **argv)
 {
+
+
   // Initialize XI_IMG structure
   XI_IMG image;
   memset(&image, 0, sizeof(XI_IMG));
@@ -225,6 +256,9 @@ int main()
   // Simplyfied error handling (just for demonstration)
   try
   {
+
+
+
     int cfa = 0;
     int OCVbayer = 0;
 
@@ -235,7 +269,7 @@ int main()
 
 
 
-    setDownsamplingParams(xiH);
+    lirena_setDownsamplingParams(xiH);
 
 
 	  // Get type of camera color filter
@@ -338,7 +372,29 @@ int main()
 
 
 
+    //{ init app state:
+      StandaloneApplicationState globalAppState(argc, argv);
 
+    
+      globalAppState.cudaDemoisaicStream = cv::cuda::Stream();
+      
+      globalAppState.cudaFrameDataArray = 
+        new CudaFrameData[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
+         
+      // init GpuMats in case they are repurposed later without reinit:
+      for(int i = 0; i < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES; i++)
+      {
+        CudaFrameData * currentCudaFrameData = 
+          & (globalAppState.cudaFrameDataArray[i]);
+      
+        currentCudaFrameData->appStatePtr = &globalAppState;
+
+        currentCudaFrameData->gpuRawMatrix = 
+          cuda::GpuMat(height, width, CV_8UC1);  
+        currentCudaFrameData->gpuColorMatrix =
+          cuda::GpuMat(height, width, CV_8UC3);
+      }
+    //}
 
 
 
@@ -353,13 +409,15 @@ int main()
       throw "Starting image acquisition failed";
     }
     
-    if(DO_SHOW_IMAGE)
+
+
+    if(globalAppState.config.doLocalDisplay)
     {
         // Create a GUI window with OpenGL support
         namedWindow("XIMEA camera", WINDOW_OPENGL);
         // OpenGL window makes problems!
         //namedWindow("XIMEA camera");
-        resizeWindow("XIMEA camera", width/2, height/2);
+        resizeWindow("XIMEA camera", width/4, height/4);
         //resizeWindow("XIMEA camera", 1600 , 1000);
     }
  
@@ -367,27 +425,7 @@ int main()
     //void *imageGpu;
 
 
-    //{ init app state:
-      // to zeros ...
-      memset(&globalAppState, 0, sizeof(ApplicationState));
 
-      globalAppState.cudaDemoisaicStream = cv::cuda::Stream();
-      
-      globalAppState.cudaFrameDataArray = 
-        new CudaFrameData[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
-         
-      // init GpuMats in case they are repurposed later without reinit:
-      for(int i = 0; i < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES; i++)
-      {
-        CudaFrameData * currentCudaFrameData = 
-          & (globalAppState.cudaFrameDataArray[i]);
-      
-        currentCudaFrameData->gpuRawMatrix = 
-          cuda::GpuMat(height, width, CV_8UC1);  
-        currentCudaFrameData->gpuColorMatrix =
-          cuda::GpuMat(height, width, CV_8UC3);
-      }
-    //}
 
   
   
@@ -488,23 +526,28 @@ int main()
         currentCudaFrameData->gpuColorMatrix, 
         OCVbayer, 
         0, // derive channel layout from other params
-        globalAppState.cudaDemoisaicStream );
+        globalAppState.cudaDemoisaicStream 
+      );
      
       //  all allways 1 even with auto wb enabled 0o
       // printf("white balance params from ximea: %f, %f, %f\n",
       //   image.wb_red, image.wb_green, image.wb_blue);
         
       //Apply static white balance by multiplying the channels
-      cuda::multiply(
-        currentCudaFrameData->gpuColorMatrix, 
-        cv::Scalar(WB_BLUE, WB_GREEN, WB_RED), 
-        //cv::Scalar(image.wb_red, image.wb_green, image.wb_blue), 
-        currentCudaFrameData->gpuColorMatrix,
-        1.0, 
-        -1,
-        globalAppState.cudaDemoisaicStream
-      );
 
+      //no WB (after coordination with Marco)
+      // if(DO_WHITE_BALANCE)
+      // {
+      //   cuda::multiply(
+      //     currentCudaFrameData->gpuColorMatrix, 
+      //     cv::Scalar(WB_BLUE, WB_GREEN, WB_RED), 
+      //     //cv::Scalar(image.wb_red, image.wb_green, image.wb_blue), 
+      //     currentCudaFrameData->gpuColorMatrix,
+      //     1.0, 
+      //     -1,
+      //     globalAppState.cudaDemoisaicStream
+      //   );
+      // }
 
    
       globalAppState.cudaDemoisaicStream.enqueueHostCallback(	
@@ -544,7 +587,7 @@ int main()
 
 
 
-     if(DO_SHOW_IMAGE)
+     if(globalAppState.config.doLocalDisplay)
      {   
         // Render image to the screen (using OpenGL) 
         //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);

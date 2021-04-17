@@ -22,7 +22,7 @@ static char args_doc[] = "IP Port";
 static struct argp_option options[] = 
 {
   {"captureDeviceType",  'd', "TYPE",    0, 
-    "TYPE can be either of: "
+    "(UNUSED YET) TYPE can be either of: "
     "'Ximea' (camera, default), "
     "'MagewellEco' (capture card), "
     "'videotestsrc' (GStreamer internal test video signal, "
@@ -33,7 +33,7 @@ static struct argp_option options[] =
     "For debugging: Do NOT inject KLV meta data into frames (KLV injection is enabled per default)" },
 
   {"localdisplay",  'l', 0,         0, 
-    "For debugging: display video locally, (not just stream per UDP)" },
+    "For debugging: display video locally, (not just stream per UDP)" },  
   {"localGUI",      'g', 0,         0, 
     "For debugging: show GUI to control params (not yet supported for each device)" },
   

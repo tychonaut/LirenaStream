@@ -3,6 +3,8 @@
 
 #include "LirenaCaptureApp.h"
 
+#include <thread>
+
 
 // #include <gst/app/gstappsrc.h>
 
@@ -40,7 +42,9 @@ void lirena_captureApp_destroy(LirenaCaptureApp *appPtr);
 //----------------------------------------------------------------------------
 
 
-
+// pthread and std::thread compatible? (required for thread safe std::queue)
+template <typename T>
+using strip = typename std::remove_pointer<typename std::decay<T>::type>::type;
 
 
 
@@ -50,6 +54,17 @@ void lirena_captureApp_destroy(LirenaCaptureApp *appPtr);
 //-----------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
+	// pthread and std::thread compatible?  (required for thread safe std::queue)
+	static_assert
+		(std::is_same<
+			strip<
+				std::thread::native_handle_type
+			>,
+			pthread_t
+		>::value,
+        "libstdc++ doesn't use pthread_t");
+
+
 	LirenaCaptureApp *appPtr = lirena_captureApp_create(argc, argv);
 
 	//TODO find out if this threading- gui mess can be reordered/reduced...

@@ -59,12 +59,20 @@ all_deps = [
 
 #install_directory = get_option('install_directory')
 
+#hack: also use lirenaConfig:
 
-exe_source_files = ['ocvDemosaic.cpp']
+exe_source_files = [
+  'ocvDemosaic.cpp',
+  '../../LirenaCapture/src/LirenaConfig.cpp' 
+  ]
 
 executable('ocvDemosaic',
   exe_source_files,
   dependencies : all_deps,
-  include_directories: ['/usr/local/include/', '/usr/local/cuda/include']
+  include_directories: [
+    '../../LirenaCapture/include',
+    '/usr/local/include/', 
+    '/usr/local/cuda/include',
+  ]
 )
 
