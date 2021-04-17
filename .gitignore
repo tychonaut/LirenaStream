@@ -50,3 +50,20 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+#####################################
+# manually added stuff:
+
+# meson and cmake build directories
+# for some reason not irnored on devel machine 
+builddir/
+
+#video and KLV experiments dump:
+*.mpg
+*.klv
+
+
+# Visual Studio Code: some stuff that doesn't seem config-switchable
+*/.vscode/settings.json
+*/.vscode/tasks.json
+
