@@ -178,7 +178,7 @@ LirenaCaptureApp *lirena_captureApp_create(int argc, char **argv)
 		(LirenaCaptureApp *) g_malloc0(sizeof(LirenaCaptureApp));
 
 
-	appPtr->config = parseArguments(argc, argv);
+	appPtr->config = LirenaConfig(argc, argv);
 
 	//for backtracking
 	appPtr->streamer.configPtr = &appPtr->config;

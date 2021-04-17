@@ -181,7 +181,7 @@ gboolean lirena_XimeaStreamer_setupCamParams(
 		// set exposure in microseconds from CLI arg
 		xiSetParamInt(cameraHandle, 
 			XI_PRM_EXPOSURE, 
-			1000 * config->exposure_ms);
+			1000 * config->ximeaparams.exposure_ms);
 	}
 
 	return TRUE;

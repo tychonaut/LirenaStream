@@ -11,9 +11,9 @@ __GL_SYNC_TO_VBLANK=0 \
     --exposure=45  \
     --output=localOutput_20.mpg \
     $@ \
+    --localdisplay \
     
     
 exit 0
 
 
-    --localdisplay \
