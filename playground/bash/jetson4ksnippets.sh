@@ -1,9 +1,18 @@
 #!/bin/bash
 
-myResX=3840
-myResY=3840
+#works
+#myResX=3840
+#myResY=3840
 
-myFPS=8
+#works!
+myResX=4096
+myResY=3112
+
+
+myResX=5612
+myResY=4396
+
+myFPS=4
 
 numtotalFrames=32
 
@@ -27,6 +36,7 @@ gst-launch-1.0 \
     \
     myTee1. ! \
     nvvidconv ! \
+        "video/x-raw(memory:NVMM),width=4096,height=3112" ! \
     queue ! \
     queue max-size-bytes=1000000000 ! \
     nvv4l2h264enc ! \
@@ -36,8 +46,10 @@ gst-launch-1.0 \
     tsparse ! \
     filesink location=a.mpg \
     
-    
 exit 0
+
+    nveglglessink \
+    
 
 GST_DEBUG=2 gst-launch-1.0 playbin uri=file://$(pwd)/a.mpg
         "video/x-raw(memory:NVMM),format=I420,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
