@@ -24,6 +24,8 @@
 //#define DO_SHOW_IMAGE 0
 #define DO_USE_SENSOR_DECIMATION 0
 #define DO_USE_CROP_INSTEAD_RESIZE 1
+// add a GPU->CPU download to simulate non-nvivafilter-gstreamer interface
+#define SHOW_CPUMAT_INSTEAD_GPUMAT 1
 
 //#define DO_WHITE_BALANCE 0
 
@@ -419,12 +421,13 @@ int main(int argc, char **argv)
     if (stat != XI_OK)
       throw "Could not get image height from camera";
 
+    
 
 
 
 
     //{ init app state:
-      StandaloneApplicationState globalAppState(argc, argv);
+    StandaloneApplicationState globalAppState(argc, argv);
 
     
       globalAppState.cudaDemoisaicStream = cv::cuda::Stream();
@@ -441,11 +444,7 @@ int main(int argc, char **argv)
         currentCudaFrameData->appStatePtr = &globalAppState;
 
 
-
         currentCudaFrameData->setupCropRect(height,width, &globalAppState.config);
-
-
-
 
 
         currentCudaFrameData->gpuRawMatrix = 
@@ -507,13 +506,14 @@ int main(int argc, char **argv)
 
         #endif
 
-
-
       }
     //}
 
 
-
+    printf("SENSOR resolution to be fed into GStreamer:      %dx%d\n", width, height);
+    printf("GPU-cropped resolution to be fed into GStreamer: %dx%d\n", 
+      globalAppState.cudaFrameDataArray[0].cropRectangle.width, 
+      globalAppState.cudaFrameDataArray[0].cropRectangle.height);
 
 
 
@@ -649,11 +649,15 @@ int main(int argc, char **argv)
         globalAppState.cudaDemoisaicStream 
       );
 
-      // //unfortunate hack to get easy-gst-compatible memory: download gpu to cpu:
-      //  currentCudaFrameData->gpuCroppedColorMatrix.download(
-      //    //cv::OutputArray(currentCudaFrameData->cpuResizedColorMatrix),
-      //    currentCudaFrameData->cpuCroppedColorMatrix,
-      //    globalAppState.cudaDemoisaicStream);
+      #if SHOW_CPUMAT_INSTEAD_GPUMAT 
+
+        //unfortunate hack to get easy-gst-compatible memory: download gpu to cpu:
+        currentCudaFrameData->gpuCroppedColorMatrix.download(
+          //cv::OutputArray(currentCudaFrameData->cpuResizedColorMatrix),
+          currentCudaFrameData->cpuCroppedColorMatrix,
+          globalAppState.cudaDemoisaicStream);
+
+      #endif // SHOW_CPUMAT_INSTEAD_GPUMAT 
 
     #else
 
@@ -710,11 +714,15 @@ int main(int argc, char **argv)
           globalAppState.cudaDemoisaicStream
       );
       
-      // //unfortunate hack to get easy-gst-compatible memory: download gpu to cpu:
-      // currentCudaFrameData->gpuResizedColorMatrix.download(
-      //   //cv::OutputArray(currentCudaFrameData->cpuResizedColorMatrix),
-      //   currentCudaFrameData->cpuResizedColorMatrix,
-      //   globalAppState.cudaDemoisaicStream);
+      #if SHOW_CPUMAT_INSTEAD_GPUMAT 
+
+        //unfortunate hack to get easy-gst-compatible memory: download gpu to cpu:
+        currentCudaFrameData->gpuResizedColorMatrix.download(
+          //cv::OutputArray(currentCudaFrameData->cpuResizedColorMatrix),
+          currentCudaFrameData->cpuResizedColorMatrix,
+          globalAppState.cudaDemoisaicStream);
+
+      #endif // SHOW_CPUMAT_INSTEAD_GPUMAT 
 
 #endif
 
@@ -769,18 +777,29 @@ int main(int argc, char **argv)
             //block for show:
             globalAppState.cudaDemoisaicStream.waitForCompletion();
             
-           
-            //cuda::GpuMat gpuColorMatrixToShow (
-            //  currentCudaFrameData->gpuColorMatrix);
+            #if SHOW_CPUMAT_INSTEAD_GPUMAT 
+      
+              imshow("XIMEA camera", 
+                //currentCudaFrameData->gpuColorMatrix
+                #if DO_USE_CROP_INSTEAD_RESIZE
+                  currentCudaFrameData->cpuCroppedColorMatrix
+                #else // DO_USE_CROP_INSTEAD_RESIZE
+                  currentCudaFrameData->cpuResizedColorMatrix
+                #endif // DO_USE_CROP_INSTEAD_RESIZE
+              );
             
-            imshow("XIMEA camera", 
-              //currentCudaFrameData->gpuColorMatrix
-              #if DO_USE_CROP_INSTEAD_RESIZE
-              currentCudaFrameData->gpuCroppedColorMatrix
-              #else
-               currentCudaFrameData->gpuResizedColorMatrix
-              #endif
-            );
+            #else // SHOW_CPUMAT_INSTEAD_GPUMAT
+
+              imshow("XIMEA camera", 
+                //currentCudaFrameData->gpuColorMatrix
+                #if DO_USE_CROP_INSTEAD_RESIZE
+                currentCudaFrameData->gpuCroppedColorMatrix
+                #else // DO_USE_CROP_INSTEAD_RESIZE
+                currentCudaFrameData->gpuResizedColorMatrix
+                #endif // DO_USE_CROP_INSTEAD_RESIZE
+              );
+
+            #endif // SHOW_CPUMAT_INSTEAD_GPUMAT 
        }
      }
 
