@@ -23,7 +23,7 @@
 //set to 0 to get rid of overhead of setting up the GUI/showing the image
 //#define DO_SHOW_IMAGE 0
 #define DO_USE_SENSOR_DECIMATION 0
-#define DO_SCALE_IMAGE 1
+#define DO_USE_CROP_INSTEAD_RESIZE 1
 
 //#define DO_WHITE_BALANCE 0
 
@@ -104,13 +104,42 @@ struct StandaloneApplicationState
 
 struct CudaFrameData
 {
-    CudaFrameData()
+    CudaFrameData(int camImgHeight = -1, int camImgWidth = -1, 
+      LirenaConfig* configPtr = nullptr)
     : bufferIndex(0),
       slotIsUsed(false),
       cudaHostMemory(nullptr),
-      hostRawMat()
+      hostRawMat(),
       //hostRawMatInputArray()
-    {}
+      cropRectangle()
+    {
+      setupCropRect(camImgHeight, camImgWidth, configPtr);
+    }
+
+
+    bool setupCropRect(int camImgHeight = -1, int camImgWidth = -1, 
+      LirenaConfig* configPtr = nullptr)
+    {
+      if(configPtr != nullptr && camImgHeight >0 &&  camImgWidth > 0)
+      {
+        int cropRectH = configPtr->targetResolutionY > 0 
+                ? 
+                configPtr->targetResolutionY
+                : camImgHeight;
+
+        int cropRectW = configPtr->targetResolutionX > 0 
+                ? 
+                configPtr->targetResolutionX
+                : camImgWidth;
+
+        int rectY = ( camImgHeight - cropRectH ) / 2;
+        int rectX = ( camImgWidth - cropRectW ) / 2;
+
+        cropRectangle = cv::Rect(rectX, rectY , cropRectW, cropRectH);
+      }
+      return true;
+    }
+
 
     StandaloneApplicationState* appStatePtr;
 
@@ -125,15 +154,28 @@ struct CudaFrameData
     //cv::InputArray hostRawMatInputArray;
     
     cuda::GpuMat gpuRawMatrix;   // OpenCV+Cuda-representation of XIMEA image
+
+    //{ cropping experiments:
+    cv::Rect cropRectangle;
+    # if DO_USE_CROP_INSTEAD_RESIZE 
+    cuda::GpuMat gpuCroppedRawMatrixRef;  // OpenCV+Cuda-representation of XIMEA image
+    cuda::GpuMat gpuCroppedColorMatrix; // debayered result image
+    // hack, see cpuResizedColorMatrix
+    cv::Mat cpuCroppedColorMatrix;
+    //}
+    # else
+    //{ resize workflow
     cuda::GpuMat gpuColorMatrix; // debayered result image
     cuda::GpuMat gpuResizedColorMatrix; // debayered and resized result image
-
     // hack: read back from gpu to pass to gstreamer without hassle
     // (cause despite intense search I find no workaround-free way
     // to pass a GPU mat to a GstMemory;
     // workarounds are using stuff like EGL frames and interopping is with cv::GPUMat;
     //  no time for shis right now, unfortunately)
     cv::Mat cpuResizedColorMatrix;
+    # endif
+
+
 };
 
 
@@ -398,9 +440,44 @@ int main(int argc, char **argv)
       
         currentCudaFrameData->appStatePtr = &globalAppState;
 
+
+
+        currentCudaFrameData->setupCropRect(height,width, &globalAppState.config);
+
+
+
+
+
         currentCudaFrameData->gpuRawMatrix = 
           cuda::GpuMat(height, width, CV_8UC1);  
         
+
+        #if DO_USE_CROP_INSTEAD_RESIZE
+          
+          currentCudaFrameData->gpuCroppedRawMatrixRef =
+            cuda::GpuMat(
+              currentCudaFrameData->cropRectangle.height,
+              currentCudaFrameData->cropRectangle.width,
+              CV_8UC1 
+            );
+
+            currentCudaFrameData->gpuCroppedColorMatrix =
+            cuda::GpuMat(
+              currentCudaFrameData->cropRectangle.height,
+              currentCudaFrameData->cropRectangle.width,
+              CV_8UC3
+            );
+
+
+        currentCudaFrameData->cpuCroppedColorMatrix =
+          cv::Mat(
+            currentCudaFrameData->cropRectangle.height,
+            currentCudaFrameData->cropRectangle.width,
+            CV_8UC3
+        );
+
+        #else
+
         currentCudaFrameData->gpuColorMatrix =
           cuda::GpuMat(height, width, CV_8UC3);
 
@@ -415,7 +492,7 @@ int main(int argc, char **argv)
               globalAppState.config.targetResolutionX
               : width,
             CV_8UC3);
-
+        
         currentCudaFrameData->cpuResizedColorMatrix =
           cv::Mat(
             globalAppState.config.targetResolutionY > 0 
@@ -427,6 +504,10 @@ int main(int argc, char **argv)
               globalAppState.config.targetResolutionX
               : width,
             CV_8UC3);
+
+        #endif
+
+
 
       }
     //}
@@ -550,8 +631,33 @@ int main(int argc, char **argv)
         cv::InputArray(currentCudaFrameData->hostRawMat),
         globalAppState.cudaDemoisaicStream);
       //}
-      
-      
+
+
+
+      #if DO_USE_CROP_INSTEAD_RESIZE
+
+      //crop
+      currentCudaFrameData->gpuCroppedRawMatrixRef =
+          cuda::GpuMat( currentCudaFrameData->gpuRawMatrix,
+              currentCudaFrameData->cropRectangle);
+
+      cuda::demosaicing(
+        currentCudaFrameData->gpuCroppedRawMatrixRef, 
+        currentCudaFrameData->gpuCroppedColorMatrix, 
+        OCVbayer, 
+        0, // derive channel layout from other params
+        globalAppState.cudaDemoisaicStream 
+      );
+
+      // //unfortunate hack to get easy-gst-compatible memory: download gpu to cpu:
+      //  currentCudaFrameData->gpuCroppedColorMatrix.download(
+      //    //cv::OutputArray(currentCudaFrameData->cpuResizedColorMatrix),
+      //    currentCudaFrameData->cpuCroppedColorMatrix,
+      //    globalAppState.cudaDemoisaicStream);
+
+    #else
+
+      //currentCudaFrameData->gpuRawMatrix.adjustROI
 
 
    
@@ -610,12 +716,16 @@ int main(int argc, char **argv)
       //   currentCudaFrameData->cpuResizedColorMatrix,
       //   globalAppState.cudaDemoisaicStream);
 
+#endif
+
    
       globalAppState.cudaDemoisaicStream.enqueueHostCallback(	
         cudaDemosaicStreamCallback, // StreamCallback 	callback,
         currentCudaFrameData // void * 	userData 
-      );	
-      
+      );
+
+
+
 
       //{ FPS calcs: ----------------------------------------------------------
 	  globalAppState.current_captured_frame_count++;
@@ -654,7 +764,7 @@ int main(int argc, char **argv)
         //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
         
         //only show every nth frame:
-        if(globalAppState.cuda_processed_frame_count % 3 == 0)
+        //if(globalAppState.cuda_processed_frame_count % 3 == 0)
         {
             //block for show:
             globalAppState.cudaDemoisaicStream.waitForCompletion();
@@ -665,7 +775,11 @@ int main(int argc, char **argv)
             
             imshow("XIMEA camera", 
               //currentCudaFrameData->gpuColorMatrix
-              currentCudaFrameData->gpuResizedColorMatrix
+              #if DO_USE_CROP_INSTEAD_RESIZE
+              currentCudaFrameData->gpuCroppedColorMatrix
+              #else
+               currentCudaFrameData->gpuResizedColorMatrix
+              #endif
             );
        }
      }
