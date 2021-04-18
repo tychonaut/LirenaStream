@@ -5,14 +5,25 @@
 #myResY=3840
 
 #works!
+
+
+
+
+
+myResX=1920
+myResY=1080
+
+myResX=3840
+myResY=2160
+
 myResX=4096
 myResY=3112
 
+# works, though system freezes for several seconds at the beginning, then very slow
+myResX=5120
+myResY=5120
 
-myResX=5612
-myResY=4396
-
-myFPS=4
+myFPS=1
 
 numtotalFrames=32
 
@@ -24,17 +35,12 @@ numtotalFrames=32
 
 GST_DEBUG=2 \
 gst-launch-1.0 \
-    videotestsrc num-buffers=${numtotalFrames} pattern=blink do-timestamp=true !  \
+    videotestsrc num-buffers=${numtotalFrames}  do-timestamp=true !  \
         "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
-    tee name=myTee1  \
+    tee name=myTee1 \
     \
     myTee1. ! \
     queue ! \
-    nvvidconv ! \
-        "video/x-raw(memory:NVMM),width=960,height=960" ! \
-    nvoverlaysink \
-    \
-    myTee1. ! \
     nvvidconv ! \
         "video/x-raw(memory:NVMM),width=4096,height=3112" ! \
     queue ! \
@@ -46,8 +52,28 @@ gst-launch-1.0 \
     tsparse ! \
     filesink location=a.mpg \
     
+exit 0    
+    \
+    myTee1. ! \
+    queue ! \
+    nvvidconv ! \
+         "video/x-raw(memory:NVMM),format=(string)NV12,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    nvivafilter cuda-process=true customer-lib-name="libnvsample_cudaprocess.so" ! \
+        'video/x-raw(memory:NVMM),format=(string)NV12' ! \
+    nvvidconv ! \
+         "video/x-raw(memory:NVMM),format=(string)NV12,width=512,height=512,framerate=${myFPS}/1" ! \
+    nvoverlaysink display-id=0 -e \
+
 exit 0
 
+    nvvidconv ! \
+        "video/x-raw(memory:NVMM),width=960,height=960" ! \
+    nvoverlaysink \
+
+
+
+    
+pattern=blink
     nveglglessink \
     
 
