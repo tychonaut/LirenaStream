@@ -20,10 +20,11 @@ myResX=4096
 myResY=3112
 
 # works, though system freezes for several seconds at the beginning, then very slow
+# works NOT with nvtee
 myResX=5120
-myResY=5120
+myResY=4340
 
-myFPS=1
+myFPS=10
 
 numtotalFrames=32
 
@@ -32,6 +33,94 @@ numtotalFrames=32
 #myResY=2160
 #myResX=3840
 #myResY=2160
+
+
+GST_DEBUG=4 \
+gst-launch-1.0 \
+    videotestsrc num-buffers=${numtotalFrames}  do-timestamp=true !  \
+        "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    nvvidconv ! \
+         "video/x-raw(memory:NVMM),format=(string)NV12,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    tee name=T \
+    \
+    T. ! \
+    queue max-size-bytes=1000000000 ! \
+    nvivafilter cuda-process=true customer-lib-name="libnvsample_cudaprocess.so" ! \
+        'video/x-raw(memory:NVMM),format=(string)NV12' ! \
+    nvvidconv ! \
+         "video/x-raw(memory:NVMM),format=(string)NV12,width=512,height=512,framerate=${myFPS}/1" ! \
+    nvoverlaysink display-id=0  \
+    \
+    T. ! \
+    queue max-size-bytes=1000000000 ! \
+    nvvidconv ! \
+        "video/x-raw(memory:NVMM),width=4096,height=3112" ! \
+    nvv4l2h264enc ! \
+    h264parse ! \
+    mpegtsmux name=mp2ts_muxer alignment=7 \
+    mp2ts_muxer. ! \
+    tsparse ! \
+    filesink location=a.mpg  \
+
+
+exit 0
+
+
+
+GST_DEBUG=4 \
+gst-launch-1.0 \
+    videotestsrc num-buffers=${numtotalFrames}  do-timestamp=true !  \
+        "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    nvvidconv ! \
+         "video/x-raw(memory:NVMM),format=(string)NV12,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    tee name=nvT \
+    \
+    nvT. ! \
+    queue ! \
+    nvivafilter cuda-process=true customer-lib-name="libnvsample_cudaprocess.so" ! \
+        'video/x-raw(memory:NVMM),format=(string)NV12' ! \
+    nvvidconv ! \
+         "video/x-raw(memory:NVMM),format=(string)NV12,width=512,height=512,framerate=${myFPS}/1" ! \
+    nvoverlaysink display-id=0 \
+    \
+    nvT. ! \
+    queue max-size-bytes=1000000000 ! \
+    nvvidconv ! \
+        "video/x-raw(memory:NVMM),width=4096,height=3112" ! \
+    nvv4l2h264enc ! \
+    h264parse ! \
+    mpegtsmux name=mp2ts_muxer alignment=7 \
+    mp2ts_muxer. ! \
+    tsparse ! \
+    filesink location=a.mpg async=true \
+
+
+exit 0
+
+    queue max-size-bytes=1000000000 ! \
+    nvoverlaysink display-id=0 -e \
+
+
+gst-launch-1.0 \
+    videotestsrc num-buffers=${numtotalFrames}  do-timestamp=true !  \
+        "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    nvvidconv ! \
+         "video/x-raw(memory:NVMM),format=(string)NV12,width=512,height=512,framerate=${myFPS}/1" ! \
+    nvoverlaysink display-id=0 -e \
+
+exit 0
+
+
+gst-launch-1.0 \
+    videotestsrc num-buffers=${numtotalFrames}  do-timestamp=true !  \
+        "video/x-raw,width=${myResX},height=${myResY},framerate=${myFPS}/1" ! \
+    nvvidconv ! \
+         "video/x-raw(memory:NVMM),format=(string)NV12,width=512,height=512,framerate=${myFPS}/1" ! \
+    nvoverlaysink display-id=0 -e \
+
+exit 0
+
+
 
 GST_DEBUG=2 \
 gst-launch-1.0 \
@@ -43,16 +132,13 @@ gst-launch-1.0 \
     queue ! \
     nvvidconv ! \
         "video/x-raw(memory:NVMM),width=4096,height=3112" ! \
-    queue ! \
     queue max-size-bytes=1000000000 ! \
     nvv4l2h264enc ! \
     h264parse ! \
     mpegtsmux name=mp2ts_muxer alignment=7 \
     mp2ts_muxer. ! \
     tsparse ! \
-    filesink location=a.mpg \
-    
-exit 0    
+    filesink location=a.mpg \    
     \
     myTee1. ! \
     queue ! \
@@ -66,9 +152,6 @@ exit 0
 
 exit 0
 
-    nvvidconv ! \
-        "video/x-raw(memory:NVMM),width=960,height=960" ! \
-    nvoverlaysink \
 
 
 
