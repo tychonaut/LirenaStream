@@ -6,6 +6,9 @@
 #     -> tsdemux  -> h264 dec -> scale -> show
 #                 -> klv      -> fakesink (dump klv to console)
 #                             -> dump to disk
+
+
+
 GST_DEBUG=0 \
 __GL_SYNC_TO_VBLANK=0 \
 gst-launch-1.0 \
@@ -30,8 +33,8 @@ gst-launch-1.0 \
   avdec_h264 !   \
   videoconvert !   \
   videoscale !   \
-    video/x-raw,width=512,height=512 ! \
-  xvimagesink sync=false async=true \
+    video/x-raw,width=2664,height=2304 ! \
+  fpsdisplaysink  video-sink="xvimagesink" sync=false async-handling=true \
   \
   myTsDemux. ! \
     meta/x-klv,parsed=true ! \
@@ -49,3 +52,7 @@ gst-launch-1.0 \
     
 exit 0
 
+
+  xvimagesink \
+video/x-raw,width=4096,height=3112 ! \
+xvimagesink sync=false async=true \
