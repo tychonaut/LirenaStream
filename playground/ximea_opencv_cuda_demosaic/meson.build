@@ -27,11 +27,17 @@ opencv_dep = dependency('opencv', version : '>=3.4',
 
 
 
+gst_app_dep = dependency('gstreamer-app-1.0')
+#gst_video_dep = dependency('gstreamer-video-1.0')
+
+
 all_deps = [
     ximea_m3api_dep,
     cuda_dep,
-    opencv_dep
+    opencv_dep,
+    gst_app_dep,
 ]
+    ##gst_video_dep,
 
 
 
@@ -63,6 +69,7 @@ all_deps = [
 
 exe_source_files = [
   'ocvDemosaic.cpp',
+  'src/LirenaHackStreamer.cpp',
   '../../LirenaCapture/src/LirenaConfig.cpp' 
   ]
 
@@ -70,6 +77,7 @@ executable('ocvDemosaic',
   exe_source_files,
   dependencies : all_deps,
   include_directories: [
+    'include',
     '../../LirenaCapture/include',
     '/usr/local/include/', 
     '/usr/local/cuda/include',
