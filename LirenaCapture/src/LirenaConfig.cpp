@@ -2,6 +2,8 @@
 
 #include "LirenaConfig.h"
 
+#include <glib-2.0/glib.h> //g_assert
+
 #include <cstring> //strcmp
 
 
@@ -139,7 +141,8 @@ parse_opt (int key, char *arg, struct argp_state *state)
       break;
 
     case 't':
-      myArgs->useTCP = true;
+      myArgs->useTCP = true;  int getStreamingResolutionX();
+  int getStreamingResolutionY();
       break;
 
     case 'e':
@@ -184,12 +187,7 @@ LirenaConfig::LirenaConfig(int argc, char **argv)
     this->injectKLVmeta = true;
 
     this->IP = "192.168.0.169";
-    this->port = "5001";
-
-    this->targetResolutionX = -1;
-    this->targetResolutionY = -1;
-    this->targetFPS = -1;
-
+    this->port = "5001";  
     this->useTCP = false;
 
     this->doLocalDisplay = false;
@@ -282,6 +280,29 @@ LirenaConfig::LirenaConfig(int argc, char **argv)
     );
 
 
+}
 
+int LirenaConfig::getStreamingResolutionX () const
+{
+  g_assert("sensor resolution already acquired" &&
+   this->ximeaparams.activeSensorResolutionX > 0 &&
+   this->ximeaparams.activeSensorResolutionX > 0 );
 
+  return 
+    targetResolutionX > 0 
+    ? targetResolutionX
+    : ximeaparams.activeSensorResolutionX;
+
+}
+
+int LirenaConfig::getStreamingResolutionY() const
+{
+  g_assert("sensor resolution already acquired" &&
+   this->ximeaparams.activeSensorResolutionX > 0 &&
+   this->ximeaparams.activeSensorResolutionX > 0 );
+
+  return 
+    targetResolutionY > 0 
+    ? targetResolutionY
+    : ximeaparams.activeSensorResolutionY;
 }

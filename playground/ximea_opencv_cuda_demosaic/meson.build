@@ -70,6 +70,7 @@ all_deps = [
 exe_source_files = [
   'ocvDemosaic.cpp',
   'src/LirenaHackStreamer.cpp',
+  'src/LirenaHackXimeaCamera.cpp',
   '../../LirenaCapture/src/LirenaConfig.cpp' 
   ]
 

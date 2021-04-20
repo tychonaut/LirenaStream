@@ -43,6 +43,11 @@ class LirenaConfig
 
   explicit LirenaConfig(int argc, char **argv);
 
+  
+  int getStreamingResolutionX() const;
+  int getStreamingResolutionY() const;
+
+
   //keep to init gtk, gst etc..
   int argc;
   char **argv;
@@ -110,6 +115,10 @@ class LirenaConfig
     // default: false (at the moment,
     // but will change as soon as implemented)
     bool useCudaDemosaic;
+
+    // Warning! set only after opening and configuring device!
+    int activeSensorResolutionX = 0;
+    int activeSensorResolutionY = 0;
   } 
   ximeaparams;
 

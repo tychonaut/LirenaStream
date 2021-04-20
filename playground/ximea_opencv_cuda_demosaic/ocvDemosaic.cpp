@@ -1,6 +1,7 @@
 
 #include "LirenaConfig.h"
 
+#include "LirenaHackXimeaCamera.h"
 #include "LirenaHackStreamer.h"
 
 
@@ -25,10 +26,11 @@
 
 //{Hack: too little time to use CLI args ...
 
-//set to 0 to get rid of overhead of setting up the GUI/showing the image
-//#define DO_SHOW_IMAGE 0
+
 #define DO_USE_SENSOR_DECIMATION 0
+
 #define DO_USE_CROP_INSTEAD_RESIZE 1
+
 // add a GPU->CPU download to simulate non-nvivafilter-gstreamer interface
 #define SHOW_CPUMAT_INSTEAD_GPUMAT 1
 
@@ -40,13 +42,12 @@
 #define WB_RED 1.3
 
 #if DO_USE_SENSOR_DECIMATION
-# define decimationMultiplierToSet 2
+const int global_decimationMultiplierToSet = 2;
 #else
-# define decimationMultiplierToSet 1
+const int global_decimationMultiplierToSet = 1;
 #endif
 
-#define targetScaledResX 3840
-#define targetScaledResY 2160
+
 
 
 
@@ -73,7 +74,7 @@ using namespace cv;
 using namespace std;
 
 struct CudaFrameData;
-struct HackApplicationState;
+struct HackApplication;
 
 
 
@@ -81,11 +82,10 @@ struct HackApplicationState;
 //typedef void(* 	StreamCallback) (int status, void *userData)
 
 int main(int argc, char **argv);
-HackApplicationState* initApp(int argc, char **argv);
-bool lirena_setCamParams(HackApplicationState * appState);
+bool lirena_setCamParams(HackApplication * appState);
 bool lirena_setCamDownsamplingParams(HANDLE xiH);
-bool lirena_setupCudaState(HackApplicationState *appState);
-bool runAcquisitionLoop(HackApplicationState * appState);
+bool lirena_setupCudaState(HackApplication *appState);
+bool runAcquisitionLoop(HackApplication * appState);
 void cudaDemosaicStreamCallback(int status, void *userData);
 
 //-----------------------------------------------------------------------------
@@ -94,23 +94,24 @@ void cudaDemosaicStreamCallback(int status, void *userData);
 
 //-----------------------------------------------------------------------------
 // init to zeros/false via memset
-struct HackApplicationState
+struct HackApplication
 {
-    HackApplicationState(int argc, char **argv)
+    HackApplication(int argc, char **argv)
       : config(argc, argv),
+        xiCam(&config),
         streamer(&config)
     {}
 
     LirenaConfig config;
 
+    LirenaHackXimeaCamera xiCam;
+
+
     LirenaHackStreamer streamer;
 
-    XI_IMG xiImage;
-    HANDLE xiH = NULL;
-    int OCVbayerPattern = 0;
-
-    int ximeaImageWidth = -1;
-    int ximeaImageHeight = -1;
+    //resolution that comes form the sensor
+    //int ximeaImageWidth = -1;
+    //int ximeaImageHeight = -1;
 
     bool doDisplayProcessedImage = false; //yes, not showing anything is the default
         
@@ -138,37 +139,34 @@ struct HackApplicationState
 };
 
 struct CudaFrameData
-{
-    CudaFrameData(int camImgHeight = -1, int camImgWidth = -1, 
-      LirenaConfig* configPtr = nullptr)
+{   
+    CudaFrameData()
     : bufferIndex(0),
       slotIsUsed(false),
       cudaHostMemoryForXiImage(nullptr),
       hostRawMat(),
-      //hostRawMatInputArray()
       cropRectangle()
     {
-      setupCropRect(camImgHeight, camImgWidth, configPtr);
     }
 
 
-    bool setupCropRect(int camImgHeight = -1, int camImgWidth = -1, 
-      LirenaConfig* configPtr = nullptr)
+    bool setupCropRect(LirenaConfig* configPtr = nullptr)
     {
-      if(configPtr != nullptr && camImgHeight >0 &&  camImgWidth > 0)
+      if(configPtr != nullptr)
       {
+        g_assert(configPtr->ximeaparams.activeSensorResolutionY > 0);
+        g_assert(configPtr->ximeaparams.activeSensorResolutionX > 0);
+
         int cropRectH = configPtr->targetResolutionY > 0 
-                ? 
-                configPtr->targetResolutionY
-                : camImgHeight;
+                ? configPtr->targetResolutionY
+                : configPtr->ximeaparams.activeSensorResolutionY;
 
         int cropRectW = configPtr->targetResolutionX > 0 
-                ? 
-                configPtr->targetResolutionX
-                : camImgWidth;
+                ? configPtr->targetResolutionX
+                : configPtr->ximeaparams.activeSensorResolutionX;
 
-        int rectY = ( camImgHeight - cropRectH ) / 2;
-        int rectX = ( camImgWidth - cropRectW ) / 2;
+        int rectY = ( configPtr->ximeaparams.activeSensorResolutionY - cropRectH ) / 2;
+        int rectX = ( configPtr->ximeaparams.activeSensorResolutionX - cropRectW ) / 2;
 
         cropRectangle = cv::Rect(rectX, rectY , cropRectW, cropRectH);
       }
@@ -176,9 +174,9 @@ struct CudaFrameData
     }
 
 
-    HackApplicationState* appStatePtr;
+    HackApplication* appStatePtr;
 
-    int bufferIndex; // backtracking into HackApplicationState::cudaFrameDataArray
+    int bufferIndex; // backtracking into HackApplication::cudaFrameDataArray
     // Status flag: Is data slot used by cuda right now?
     bool slotIsUsed; 
     
@@ -282,21 +280,16 @@ int main(int argc, char **argv)
     gst_init(&argc, &argv);
 
     // init app state:
-    HackApplicationState*  appState =  initApp(argc, argv);
-
-    XI_RETURN xiStatus = XI_OK;
+    HackApplication*  appState = new HackApplication(argc, argv);
     
     lirena_setupCudaState(appState);
 
 
 
-    // Start the image acquisition
-    xiStatus = xiStartAcquisition(appState->xiH);
-    if (xiStatus != XI_OK)
-    {
-      throw "Starting image acquisition failed";
-    }
-    
+
+    appState->xiCam.startAcquisition();
+
+
 
     if(appState->config.doLocalDisplay)
     {
@@ -304,9 +297,11 @@ int main(int argc, char **argv)
         namedWindow("XIMEA camera", WINDOW_OPENGL);
         // OpenGL window makes problems!
         //namedWindow("XIMEA camera");
-        resizeWindow("XIMEA camera", 
-          appState->ximeaImageWidth/4, 
-          appState->ximeaImageHeight/4);
+        resizeWindow( 
+          "XIMEA camera", 
+          appState->config.getStreamingResolutionX()/4,
+          appState->config.getStreamingResolutionY()/4
+        );
         //resizeWindow("XIMEA camera", 1600 , 1000);
     }
  
@@ -320,10 +315,8 @@ int main(int argc, char **argv)
   
 
     
-    // Stop image acquitsition and close device
-    xiStopAcquisition(appState->xiH);
-    xiCloseDevice(appState->xiH); 
 
+    //cleanup;
     delete appState;
      
     // Print errors
@@ -337,39 +330,9 @@ int main(int argc, char **argv)
 
 
 
-//return value had to be delete'd
-HackApplicationState* initApp(int argc, char **argv)
-{
-  
-    HackApplicationState*  appState = new HackApplicationState(argc, argv);
-    
-    XI_RETURN xiStatus = XI_OK;
 
 
-    // Initialize XI_IMG structure
-
-    memset(&appState->xiImage, 0, sizeof(XI_IMG));
-    appState->xiImage.size = sizeof(XI_IMG);
-
-    // Get device handle for the camera
-    xiStatus =  xiOpenDevice(0, &appState->xiH);
-    if (xiStatus != XI_OK)
-      throw "Opening device failed";
-
-    bool success = lirena_setCamParams(appState);
-    g_assert(success);
-
-    return appState;
-}
-
-
-
-
-
-
-
-
-bool runAcquisitionLoop(HackApplicationState * appState)
+bool runAcquisitionLoop(HackApplication * appState)
 {
     appState->prev_time = getcurus();
 
@@ -379,14 +342,9 @@ bool runAcquisitionLoop(HackApplicationState * appState)
     //for (int i = 0; i < NUMBER_OF_IMAGES; i++)
     for(;;) // run indefinitely
     {
+      XI_IMG& xiImgRef = appState->xiCam.acquireNewFrame();
     
-      // Get host-pointer to image data
-      xiStatus = xiGetImage(appState->xiH, 5000, &appState->xiImage);
-      if (xiStatus != XI_OK)
-      {
-        throw "Getting image from camera failed";
-      }
- 
+
       //{ trying to parallelize cam image acquisition and cuda processing:
       int currentGpuMatIndex = 0;
       while(currentGpuMatIndex < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES)
@@ -442,12 +400,18 @@ bool runAcquisitionLoop(HackApplicationState * appState)
       
       //{ Non-Blocking impl:
       cudaHostGetDevicePointer(
-        &currentCudaFrameData->cudaHostMemoryForXiImage, appState->xiImage.bp, 0);
+        &currentCudaFrameData->cudaHostMemoryForXiImage, 
+        xiImgRef.bp, 
+        0);
       //CudaMem hostSrc(height, width, CV_8UC1, CudaMem::ALLOC_PAGE_LOCKED);
 
       // upload data from host: 
       // wrapper arond host mem:   
-      const int	sizes[] = {appState->ximeaImageHeight, appState->ximeaImageWidth};
+      const int	sizes[] = {
+        appState->config.ximeaparams.activeSensorResolutionY, 
+        appState->config.ximeaparams.activeSensorResolutionX
+      };
+
       currentCudaFrameData->hostRawMat =
         cv::Mat(
           2, //int 	ndims,
@@ -473,7 +437,7 @@ bool runAcquisitionLoop(HackApplicationState * appState)
       cuda::demosaicing(
         currentCudaFrameData->gpuCroppedRawMatrixRef, 
         currentCudaFrameData->gpuCroppedColorMatrix, 
-        appState->OCVbayerPattern, 
+        appState->xiCam.getOcvBayerPattern(), 
         0, // derive channel layout from other params
         appState->cudaDemoisaicStream 
       );
@@ -562,43 +526,48 @@ bool runAcquisitionLoop(HackApplicationState * appState)
 
         //{ FPS calcs: ----------------------------------------------------------
         appState->current_captured_frame_count++;
-        if (appState->xiImage.nframe > appState->last_camera_frame_count)
+        if (xiImgRef.nframe 
+            > 
+            appState->last_camera_frame_count)
         {
-          appState->lost_frames_count += appState->xiImage.nframe - (appState->last_camera_frame_count + 1);
-	  } 
-	  appState->last_camera_frame_count = appState->xiImage.nframe;
-      appState->current_time = getcurus();
-      //update around each second:
-	  if(appState->current_time - appState->prev_time > 1000000) 
-	  {
-			snprintf(
-			    appState->status_string, 
-			    STATUS_STRING_LENGTH, 
-			    "Acquisition [ Acquired: %lu, processed: %lu, skipped: %lu, fps: %.2f ]\n", 
-			    appState->current_captured_frame_count, 
-			    appState->cuda_processed_frame_count,
-			    appState->lost_frames_count, 
-			    1000000.0 * 
-			      (appState->current_captured_frame_count - appState->prev_captured_frame_count) 
-			     / (appState->current_time - appState->prev_time)
-			);
-			printf("%s",appState->status_string);
-			
-			appState->prev_captured_frame_count = appState->current_captured_frame_count;
-			appState->prev_time = appState->current_time;  
-	  }
-      //}  --------------------------------------------------------------------
-
-
-
-     if(appState->config.doLocalDisplay)
-     {   
-        // Render image to the screen (using OpenGL) 
-        //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
-        
-        //only show every nth frame:
-        //if(appState->cuda_processed_frame_count % 3 == 0)
+          appState->lost_frames_count += 
+            xiImgRef.nframe 
+            - 
+            (appState->last_camera_frame_count + 1);
+        }
+        appState->last_camera_frame_count = xiImgRef.nframe;
+        appState->current_time = getcurus();
+        //update around each second:
+        if (appState->current_time - appState->prev_time > 1000000)
         {
+          snprintf(
+              appState->status_string,
+              STATUS_STRING_LENGTH,
+              "Acquisition [ Acquired: %lu, processed: %lu, skipped: %lu, fps: %.2f ]\n",
+              appState->current_captured_frame_count,
+              appState->cuda_processed_frame_count,
+              appState->lost_frames_count,
+              1000000.0 *
+                  (appState->current_captured_frame_count 
+                  - 
+                  appState->prev_captured_frame_count) 
+                  / 
+                  (appState->current_time - appState->prev_time));
+          printf("%s", appState->status_string);
+
+          appState->prev_captured_frame_count = appState->current_captured_frame_count;
+          appState->prev_time = appState->current_time;
+        }
+        //}  --------------------------------------------------------------------
+
+        if (appState->config.doLocalDisplay)
+        {
+          // Render image to the screen (using OpenGL)
+          //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
+
+          //only show every nth frame:
+          //if(appState->cuda_processed_frame_count % 3 == 0)
+          {
             //block for show:
             appState->cudaDemoisaicStream.waitForCompletion();
             
@@ -639,170 +608,10 @@ bool runAcquisitionLoop(HackApplicationState * appState)
 }
 
 
-bool lirena_setCamDownsamplingParams(HANDLE xiH)
-{
-
-  XI_RETURN xiStatus = XI_OK;
-
-  //"decimation"
-  int decimation_selector = 0;
-  xiGetParamInt(xiH, XI_PRM_DECIMATION_SELECTOR, &decimation_selector);
-  // is 0 (XI_DEC_SELECT_SENSOR), despite api saying 1
-  printf("previous XI_PRM_DECIMATION_SELECTOR: %d\n", decimation_selector);
-  xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_SELECTOR,
-                           XI_DEC_SELECT_SENSOR // no error, but not works
-                           //XI_BIN_SELECT_DEVICE_FPGA  //<-- returns XI_PARAM_NOT_SETTABLE             =114
-                           //XI_BIN_SELECT_HOST_CPU
-  );
-  if (xiStatus != XI_OK)
-  {
-    printf(" XI_PRM_DECIMATION_SELECTOR, XI_DEC_SELECT_SENSOR: return value not XI_OK: %d\n", xiStatus);
-    sleep(4);
-  }
-
-  int decimation_pattern = 0;
-  int decimation_multiplier = 0;
-
-  xiGetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL_PATTERN, &decimation_pattern);
-  printf("previous XI_PRM_DECIMATION_VERTICAL_PATTERN: %d\n", decimation_pattern);
-  xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL_PATTERN, XI_DEC_BAYER);
-  if (xiStatus != XI_OK)
-  {
-    printf(" XI_PRM_DECIMATION_VERTICAL_PATTERN, XI_DEC_BAYER: return value not XI_OK: %d", xiStatus);
-    sleep(4);
-  }
-  xiGetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, &decimation_multiplier);
-  printf("previous XI_PRM_DECIMATION_VERTICAL multiplier: %d\n", decimation_multiplier);
-  xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, decimationMultiplierToSet);
-  if (xiStatus != XI_OK)
-  {
-    printf(" XI_PRM_DECIMATION_VERTICAL := %d: return value not XI_OK: %d", decimationMultiplierToSet, xiStatus);
-    sleep(4);
-  }
-
-  xiGetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL_PATTERN, &decimation_pattern);
-  printf("previous XI_PRM_DECIMATION_HORIZONTAL_PATTERN: %d\n", decimation_pattern);
-  xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL_PATTERN, XI_DEC_BAYER);
-  if (xiStatus != XI_OK)
-  {
-    printf(" XI_PRM_DECIMATION_HORIZONTAL_PATTERN, XI_DEC_BAYER: return value not XI_OK: %d", xiStatus);
-    sleep(4);
-  }
-  xiGetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, &decimation_multiplier);
-  printf("previous XI_PRM_DECIMATION_HORIZONTAL multiplier: %d\n", decimation_multiplier);
-  xiSetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, decimationMultiplierToSet);
-  if (xiStatus != XI_OK)
-  {
-    printf(" XI_PRM_DECIMATION_HORIZONTAL := %d: return value not XI_OK: %d", decimationMultiplierToSet, xiStatus);
-    sleep(4);
-  }
-
-  return xiStatus == XI_OK;
-}
-
-bool lirena_setCamParams(HackApplicationState *appState)
-{
-  XI_RETURN xiStatus = XI_OK;
-
-  bool downsamplingOK = lirena_setCamDownsamplingParams(appState->xiH);
-  g_assert(downsamplingOK);
-
-  // Get type of camera color filter
-  int cfa = 0;
-  xiStatus = xiGetParamInt(appState->xiH, XI_PRM_COLOR_FILTER_ARRAY, &cfa);
-  if (xiStatus != XI_OK)
-    throw "Could not get color filter array from camera";
-
-  // Set correct demosaicing type according to camera color filter
-  switch (cfa)
-  {
-  case XI_CFA_BAYER_RGGB:
-  {
-    cout << "BAYER_RGGB color filter." << endl;
-    appState->OCVbayerPattern = COLOR_BayerRG2BGR;
-    break;
-  }
-  case XI_CFA_BAYER_BGGR:
-  {
-    cout << "BAYER_BGGR color filter." << endl;
-    appState->OCVbayerPattern = COLOR_BayerBG2BGR;
-    break;
-  }
-  case XI_CFA_BAYER_GRBG:
-  {
-    cout << "BAYER_GRBG color filter." << endl;
-    appState->OCVbayerPattern = COLOR_BayerGR2BGR;
-    break;
-  }
-  case XI_CFA_BAYER_GBRG:
-  {
-    cout << "BAYER_GBRG color filter." << endl;
-    appState->OCVbayerPattern = COLOR_BayerGB2BGR;
-    break;
-  }
-  default:
-  {
-    throw "Not supported color filter for demosaicing.";
-  }
-  }
-
-  // Use transport data format (no processing done by the API)
-  xiStatus = xiSetParamInt(appState->xiH, XI_PRM_IMAGE_DATA_FORMAT, XI_FRM_TRANSPORT_DATA);
-  if (xiStatus != XI_OK)
-    throw "Setting image data format failed";
-
-  // Make data from the camera stream to zerocopy memory
-  xiStatus = xiSetParamInt(appState->xiH, XI_PRM_TRANSPORT_DATA_TARGET, XI_TRANSPORT_DATA_TARGET_ZEROCOPY);
-  if (xiStatus != XI_OK)
-    throw "Setting transport data target failed";
-
-  // Using 8-bit images here
-  xiStatus = xiSetParamInt(appState->xiH, XI_PRM_OUTPUT_DATA_BIT_DEPTH, 8);
-  if (xiStatus != XI_OK)
-    throw "Setting bit depth failed";
-
-  // Exposure 7 ms --> more than 120 fps (if no other bottleneck is there)
-  xiStatus = xiSetParamInt(appState->xiH, XI_PRM_EXPOSURE, 7000);
-  if (xiStatus != XI_OK)
-    throw "Setting exposure failed";
-
-  // gain
-  float mingain, maxgain;
-  xiGetParamFloat(appState->xiH, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
-  xiGetParamFloat(appState->xiH, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
-
-  float mygain = mingain + (maxgain - mingain) * 1.0f;
-  xiSetParamFloat(appState->xiH, XI_PRM_GAIN, mygain);
-
-  // do auto whitebalance -> sems not applied to image,
-  // but the three multipliers are in aquried image struct (?)
-  xiStatus = xiSetParamInt(appState->xiH, XI_PRM_AUTO_WB,
-                       //0
-                       XI_ON);
-  if (xiStatus != XI_OK)
-    throw "Setting auto white balance failed";
-
-  // xiSetParamFloat(appState->xiH, XI_PRM_WB_KR, WB_RED);
-  // xiSetParamFloat(appState->xiH, XI_PRM_WB_KG, WB_GREEN);
-  // xiSetParamFloat(appState->xiH, XI_PRM_WB_KB, WB_BLUE);
-
-  // Get width of image
-
-  xiStatus = xiGetParamInt(appState->xiH, XI_PRM_WIDTH, &appState->ximeaImageWidth);
-  if (xiStatus != XI_OK)
-    throw "Could not get image width from camera";
-
-  // Get height of image
-  xiStatus = xiGetParamInt(appState->xiH, XI_PRM_HEIGHT, &appState->ximeaImageHeight);
-  if (xiStatus != XI_OK)
-    throw "Could not get image height from camera";
-
-  return xiStatus == XI_OK;
-}
 
 
 
-bool lirena_setupCudaState(HackApplicationState *appState)
+bool lirena_setupCudaState(HackApplication *appState)
 {
   appState->cudaDemoisaicStream = cv::cuda::Stream();
 
@@ -817,16 +626,14 @@ bool lirena_setupCudaState(HackApplicationState *appState)
 
     currentCudaFrameData->appStatePtr = appState;
 
-    currentCudaFrameData->setupCropRect(
-        appState->ximeaImageHeight,
-        appState->ximeaImageWidth,
-        &appState->config);
+    currentCudaFrameData->setupCropRect(&appState->config);
 
     currentCudaFrameData->gpuRawMatrix =
         cuda::GpuMat(
-            appState->ximeaImageHeight,
-            appState->ximeaImageWidth,
-            CV_8UC1);
+          //full resolution
+          appState->config.ximeaparams.activeSensorResolutionY,
+          appState->config.ximeaparams.activeSensorResolutionX,
+          CV_8UC1);
 
 #if DO_USE_CROP_INSTEAD_RESIZE
 
@@ -842,10 +649,12 @@ bool lirena_setupCudaState(HackApplicationState *appState)
             currentCudaFrameData->cropRectangle.width,
             CV_8UC3);
 
-    currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem =
-        (gchar *)g_malloc(
-            currentCudaFrameData->cropRectangle.height * currentCudaFrameData->cropRectangle.width * 4 //RGBx = four bytes
-        );
+    // currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem =
+    //     (gchar *)g_malloc(
+    //         currentCudaFrameData->cropRectangle.height 
+    //         * currentCudaFrameData->cropRectangle.width 
+    //         * 4 //RGBx = four bytes
+    //     );
 
     currentCudaFrameData->cpuCroppedColorMatrix =
         cv::Mat(
@@ -853,9 +662,21 @@ bool lirena_setupCudaState(HackApplicationState *appState)
             currentCudaFrameData->cropRectangle.width,
             //CV_8UC3
             // need to be 32bit RGBx/GBRx/xRGB for nvvidconv
-            CV_8UC4,
-            //provide self-managed memory
-            currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem);
+            CV_8UC4
+            //,
+            ////provide self-managed memory
+            //currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem
+    );
+
+
+    printf("SENSOR resolution to be fed into cv::cuda preprocessing:      %dx%d\n",
+      appState->config.ximeaparams.activeSensorResolutionX,
+      appState->config.ximeaparams.activeSensorResolutionY
+    );
+    printf("GPU-cropped resolution to be fed into GStreamer:              %dx%d\n",
+          appState->cudaFrameDataArray[0].cropRectangle.width,
+          appState->cudaFrameDataArray[0].cropRectangle.height);
+
 
 #else
 
@@ -884,11 +705,7 @@ bool lirena_setupCudaState(HackApplicationState *appState)
 
 #endif
   }
-  printf("SENSOR resolution to be fed into cv::cuda preprocessing:      %dx%d\n",
-         appState->ximeaImageWidth, appState->ximeaImageHeight);
-  printf("GPU-cropped resolution to be fed into GStreamer: %dx%d\n",
-         appState->cudaFrameDataArray[0].cropRectangle.width,
-         appState->cudaFrameDataArray[0].cropRectangle.height);
+
 
   //}
 

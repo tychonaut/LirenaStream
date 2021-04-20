@@ -11,12 +11,18 @@ gchar *LirenaHackStreamer::constructMinimalPipelineString()
     gchar *gstreamerPipelineString =
         (gchar *)g_malloc0(MAX_GSTREAMER_PIPELINE_STRING_LENGTH);
 
+
     g_snprintf(
         gstreamerPipelineString,
         (gulong)MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
 
+        " appsrc format=GST_FORMAT_TIME is-live=TRUE name=videoAppSrc ! "
+        "   video/x-raw, format=(string)BGRx,width=%d,height=%d ! "
+
         " videotestsrc do-timestamp=true ! " // num-buffers=%d  
-        "    video/x-raw !" //,width=${myStreamingResX},height=${myStreamingResY},framerate=${myTargetFPS}/1 ! "
+        "    video/x-raw  format=(string)BGRx !" 
+                    //,width=${myStreamingResX},height=${myStreamingResY},framerate=${myTargetFPS}/1 ! "
+
         //" nvvidconv ! "
         //"   video/x-raw(memory:NVMM) ! "
         //,format=(string)NV12,width=${myStreamingResX},height=${myStreamingResY},framerate=${myTargetFPS}/1" !
@@ -27,7 +33,7 @@ gchar *LirenaHackStreamer::constructMinimalPipelineString()
         //"   nvivafilter cuda-process=true customer-lib-name=libnvsample_cudaprocess.so ! "
         //"     video/x-raw(memory:NVMM),format=(string)NV12 ! "
         "   nvvidconv ! "
-        "     video/x-raw(memory:NVMM),format=(string)NV12,width=512,height=512 ! " //,framerate=${myTargetFPS}/1 ! "
+        "     video/x-raw(memory:NVMM),format=(string)NV12,width=840,height=525 ! " //,framerate=${myTargetFPS}/1 ! "
         "  nvoverlaysink display-id=0 overlay-x=840 overlay-y=0 overlay-w=840 overlay-h=525  "
         
         // " videoscale ! "
@@ -36,14 +42,46 @@ gchar *LirenaHackStreamer::constructMinimalPipelineString()
         
         //"autovideosink"
         
-        "%s",
-        ""
+        "",
+        this->config->getStreamingResolutionX(),
+        this->config->getStreamingResolutionY()
         //12 // nun total buffers
     );
 
     printf("HERE IS THE GSTREAMER PIPELINE\n\n: %s\n\n", gstreamerPipelineString);
 
     return gstreamerPipelineString;
+
+
+    // g_snprintf(
+    //     gstreamerPipelineString,
+    //     (gulong)MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
+
+    //     " videotestsrc do-timestamp=true ! " // num-buffers=%d  
+    //     "    video/x-raw !" //,width=${myStreamingResX},height=${myStreamingResY},framerate=${myTargetFPS}/1 ! "
+    //     //" nvvidconv ! "
+    //     //"   video/x-raw(memory:NVMM) ! "
+    //     //,format=(string)NV12,width=${myStreamingResX},height=${myStreamingResY},framerate=${myTargetFPS}/1" !
+    //     //" tee name=T1 "
+
+    //     //" T1. ! "
+    //     //"   queue max-size-bytes=1000000000 ! "
+    //     //"   nvivafilter cuda-process=true customer-lib-name=libnvsample_cudaprocess.so ! "
+    //     //"     video/x-raw(memory:NVMM),format=(string)NV12 ! "
+    //     "   nvvidconv ! "
+    //     "     video/x-raw(memory:NVMM),format=(string)NV12,width=512,height=512 ! " //,framerate=${myTargetFPS}/1 ! "
+    //     "  nvoverlaysink display-id=0 overlay-x=840 overlay-y=0 overlay-w=840 overlay-h=525  "
+        
+    //     // " videoscale ! "
+    //     // " videoconvert ! "
+    //     // " xvimagesink "
+        
+    //     //"autovideosink"
+        
+    //     "%s",
+    //     ""
+    //     //12 // nun total buffers
+    // );
 }
 
 bool LirenaHackStreamer::pushCvMatToGstreamer(cv::Mat &cpuMat)

@@ -297,6 +297,21 @@ gboolean lirenaCaptureDisplayController_setupCamParams(GtkToggleButton *raw, Lir
 
 	if (cameraHandle != INVALID_HANDLE_VALUE)
 	{
+		XI_RETURN xiStatus = XI_OK;
+		
+		xiStatus = xiGetParamInt(cameraHandle, XI_PRM_WIDTH, &appPtr->config.ximeaparams.activeSensorResolutionX);
+		if (xiStatus != XI_OK)
+		{
+			throw "Could not get image width from camera";
+		}
+
+		// Get height of image
+		xiStatus = xiGetParamInt(cameraHandle, XI_PRM_HEIGHT, &appPtr->config.ximeaparams.activeSensorResolutionY);
+		if (xiStatus != XI_OK)
+		{
+			throw "Could not get image height from camera";
+		}
+
 		float mingain, maxgain;
 		xiSetParamInt(cameraHandle, XI_PRM_IMAGE_DATA_FORMAT, gtk_toggle_button_get_active(raw) ? XI_RAW8 : XI_RGB32);
 
