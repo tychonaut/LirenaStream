@@ -350,6 +350,9 @@ gst-launch-1.0 -vm  \
 
 
 ########################################----------------------------------------
+########################################----------------------------------------
+#TCP stuff all broken for unknown reasons...
+
 #TCP experiment 1:
 # receive, show video
 # this one works, though with low fps and high latency
@@ -357,12 +360,12 @@ GST_DEBUG=2 \
 __GL_SYNC_TO_VBLANK=0 \
 gst-launch-1.0 -v -m \
   \
-  tcpclientsrc host=192.168.0.124 port=5001  timeout=0   ! \
+  tcpclientsrc host=192.168.0.124 port=5001    ! \
    application/x-rtp-stream,encoding-name=MP2T,media=video,clock-rate=90000 ! \
   rtpstreamdepay ! \
   \
   rtpmp2tdepay ! \
-  tsparse set-timestamps=true  ! \
+  tsparse  set-timestamps=true ! \
   tee name=fork_mp2ts_to_disk_and_show \
     fork_mp2ts_to_disk_and_show. ! \
     queue !   \
@@ -371,13 +374,16 @@ gst-launch-1.0 -v -m \
       myTsDemux. ! \
         video/x-h264 ! \
       h264parse ! \
-        video/x-h264,streaming-format=byte-stream ! \
+        video/x-h264 ! \
       queue !    \
       avdec_h264 !   \
       videoconvert !   \
       xvimagesink sync=false
 
-
+,streaming-format=byte-stream
+  tsparse set-timestamps=true  ! \
+timeout=0
+tsparse  ! \
 
 #TCP experiment 2:
 # receive, dump combined video+klv to disk 
@@ -459,7 +465,7 @@ gst-launch-1.0 -v -m \
           queue max-size-time=5000000000 !   \
           avdec_h264 output-corrupt=true !   \
           videoconvert !   \
-          xvimagesink sync=false  \
+          xvimagesink sync=false async=true \
     \
     fork_mp2ts_to_disk_and_show. ! \
       filesink location=./tcp_mp2ts_h264_klv_30.mpg
@@ -679,7 +685,7 @@ gst-launch-1.0 -e \
 #  -v -m 
 GST_DEBUG=0 \
 __GL_SYNC_TO_VBLANK=0 \
-gst-launch-1.0
+gst-launch-1.0 \
   udpsrc port=5001  \
       caps='application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)MP2T' ! \
   rtpjitterbuffer latency=50 ! \
@@ -715,7 +721,7 @@ gst-launch-1.0
 GST_DEBUG=4 \
 __GL_SYNC_TO_VBLANK=0 \
 gst-launch-1.0  \
-  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/remoteOutput_010.mpg ! \
+  filesrc location=/home/markus/devel/streaming/LirenaStream/playground/remoteOutput_011.mpg ! \
   tee name=myT1 \
   \
   myT1. ! \
