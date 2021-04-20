@@ -1,6 +1,9 @@
 
 #include "LirenaConfig.h"
 
+#include "LirenaHackStreamer.h"
+
+
 #include <m3api/xiApi.h>
 
 #include <iostream>
@@ -70,18 +73,37 @@ using namespace cv;
 using namespace std;
 
 struct CudaFrameData;
+struct HackApplicationState;
 
 
 
+//-----------------------------------------------------------------------------
+//typedef void(* 	StreamCallback) (int status, void *userData)
+
+int main(int argc, char **argv);
+HackApplicationState* initApp(int argc, char **argv);
+bool lirena_setCamParams(HackApplicationState * appState);
+bool lirena_setCamDownsamplingParams(HANDLE xiH);
+bool lirena_setupCudaState(HackApplicationState *appState);
+bool runAcquisitionLoop(HackApplicationState * appState);
+void cudaDemosaicStreamCallback(int status, void *userData);
+
+//-----------------------------------------------------------------------------
+
+
+
+//-----------------------------------------------------------------------------
 // init to zeros/false via memset
 struct HackApplicationState
 {
     HackApplicationState(int argc, char **argv)
-      : config(argc, argv)
+      : config(argc, argv),
+        streamer(&config)
     {}
 
     LirenaConfig config;
 
+    LirenaHackStreamer streamer;
 
     XI_IMG xiImage;
     HANDLE xiH = NULL;
@@ -201,6 +223,7 @@ struct CudaFrameData
 };
 
 
+//-----------------------------------------------------------------------------
 
 
 
@@ -212,17 +235,107 @@ inline unsigned long getcurus() {
 }
 
 
+
+
+
 //-----------------------------------------------------------------------------
 //typedef void(* 	StreamCallback) (int status, void *userData)
+void cudaDemosaicStreamCallback(int status, void *userData)
+{
+    if(status != cudaSuccess)
+    {
+        printf("%s","Error in Cuda stream! Aborting");
+        exit(1);
+    }
+    
+    CudaFrameData * currentCudaFrameData = 
+      static_cast<CudaFrameData *>(userData);
+     
+    
+    currentCudaFrameData->appStatePtr->cuda_processed_frame_count ++;
+    
 
-int main(int argc, char **argv);
-HackApplicationState* initApp(int argc, char **argv);
-bool lirena_setCamParams(HackApplicationState * appState);
-bool lirena_setCamDownsamplingParams(HANDLE xiH);
-bool runAcquisitionLoop(HackApplicationState * appState);
-void cudaDemosaicStreamCallback(int status, void *userData);
+    //free slot for reusal:
+    currentCudaFrameData->slotIsUsed=false;
+
+
+
+    //TODO push to gst via appsrc
+}
+
+
+
+
+
+
+
+
+
+
 
 //-----------------------------------------------------------------------------
+int main(int argc, char **argv)
+{
+  // Simplyfied error handling (just for demonstration)
+  try
+  {
+    gst_init(&argc, &argv);
+
+    // init app state:
+    HackApplicationState*  appState =  initApp(argc, argv);
+
+    XI_RETURN xiStatus = XI_OK;
+    
+    lirena_setupCudaState(appState);
+
+
+
+    // Start the image acquisition
+    xiStatus = xiStartAcquisition(appState->xiH);
+    if (xiStatus != XI_OK)
+    {
+      throw "Starting image acquisition failed";
+    }
+    
+
+    if(appState->config.doLocalDisplay)
+    {
+        // Create a GUI window with OpenGL support
+        namedWindow("XIMEA camera", WINDOW_OPENGL);
+        // OpenGL window makes problems!
+        //namedWindow("XIMEA camera");
+        resizeWindow("XIMEA camera", 
+          appState->ximeaImageWidth/4, 
+          appState->ximeaImageHeight/4);
+        //resizeWindow("XIMEA camera", 1600 , 1000);
+    }
+ 
+    // Define pointer used for (CUDA) data on GPU
+    //void *imageGpu;
+
+
+
+
+    runAcquisitionLoop(appState);
+  
+
+    
+    // Stop image acquitsition and close device
+    xiStopAcquisition(appState->xiH);
+    xiCloseDevice(appState->xiH); 
+
+    delete appState;
+     
+    // Print errors
+   }catch(const char* message)
+   {
+    std::cerr << message << std::endl;
+   }
+
+}
+
+
+
 
 //return value had to be delete'd
 HackApplicationState* initApp(int argc, char **argv)
@@ -689,173 +802,100 @@ bool lirena_setCamParams(HackApplicationState *appState)
 
 
 
-int main(int argc, char **argv)
+bool lirena_setupCudaState(HackApplicationState *appState)
 {
-  
+  appState->cudaDemoisaicStream = cv::cuda::Stream();
 
-  // Simplyfied error handling (just for demonstration)
-  try
+  appState->cudaFrameDataArray =
+      new CudaFrameData[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
+
+  // init GpuMats in case they are repurposed later without reinit:
+  for (int i = 0; i < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES; i++)
   {
+    CudaFrameData *currentCudaFrameData =
+        &(appState->cudaFrameDataArray[i]);
 
-    // init app state:
-    HackApplicationState*  appState =  initApp(argc, argv);
+    currentCudaFrameData->appStatePtr = appState;
 
-    XI_RETURN xiStatus = XI_OK;
-    
+    currentCudaFrameData->setupCropRect(
+        appState->ximeaImageHeight,
+        appState->ximeaImageWidth,
+        &appState->config);
 
-
-
-    
-      appState->cudaDemoisaicStream = cv::cuda::Stream();
-      
-      appState->cudaFrameDataArray = 
-        new CudaFrameData[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
-         
-      // init GpuMats in case they are repurposed later without reinit:
-      for(int i = 0; i < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES; i++)
-      {
-        CudaFrameData * currentCudaFrameData = 
-          & (appState->cudaFrameDataArray[i]);
-      
-        currentCudaFrameData->appStatePtr = appState;
-
-
-        currentCudaFrameData->setupCropRect(
-          appState->ximeaImageHeight,
-          appState->ximeaImageWidth, 
-          &appState->config);
-
-
-        currentCudaFrameData->gpuRawMatrix = 
-          cuda::GpuMat(
+    currentCudaFrameData->gpuRawMatrix =
+        cuda::GpuMat(
             appState->ximeaImageHeight,
-            appState->ximeaImageWidth, 
-            CV_8UC1);  
-        
+            appState->ximeaImageWidth,
+            CV_8UC1);
 
-        #if DO_USE_CROP_INSTEAD_RESIZE
-          
-          currentCudaFrameData->gpuCroppedRawMatrixRef =
-            cuda::GpuMat(
-              currentCudaFrameData->cropRectangle.height,
-              currentCudaFrameData->cropRectangle.width,
-              CV_8UC1 
-            );
+#if DO_USE_CROP_INSTEAD_RESIZE
 
-            currentCudaFrameData->gpuCroppedColorMatrix =
-            cuda::GpuMat(
-              currentCudaFrameData->cropRectangle.height,
-              currentCudaFrameData->cropRectangle.width,
-              CV_8UC3
-            );
+    currentCudaFrameData->gpuCroppedRawMatrixRef =
+        cuda::GpuMat(
+            currentCudaFrameData->cropRectangle.height,
+            currentCudaFrameData->cropRectangle.width,
+            CV_8UC1);
 
+    currentCudaFrameData->gpuCroppedColorMatrix =
+        cuda::GpuMat(
+            currentCudaFrameData->cropRectangle.height,
+            currentCudaFrameData->cropRectangle.width,
+            CV_8UC3);
 
+    currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem =
+        (gchar *)g_malloc(
+            currentCudaFrameData->cropRectangle.height * currentCudaFrameData->cropRectangle.width * 4 //RGBx = four bytes
+        );
 
-        currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem =
-          (gchar*) g_malloc(
-              currentCudaFrameData->cropRectangle.height 
-              * currentCudaFrameData->cropRectangle.width 
-              * 4 //RGBx = four bytes
-          );
-
-        currentCudaFrameData->cpuCroppedColorMatrix =
-          cv::Mat(
+    currentCudaFrameData->cpuCroppedColorMatrix =
+        cv::Mat(
             currentCudaFrameData->cropRectangle.height,
             currentCudaFrameData->cropRectangle.width,
             //CV_8UC3
             // need to be 32bit RGBx/GBRx/xRGB for nvvidconv
             CV_8UC4,
             //provide self-managed memory
-            currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem
-        );
+            currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem);
 
-        #else
+#else
 
-        currentCudaFrameData->gpuColorMatrix =
-          cuda::GpuMat(height, width, CV_8UC3);
+    currentCudaFrameData->gpuColorMatrix =
+        cuda::GpuMat(height, width, CV_8UC3);
 
-        currentCudaFrameData->gpuResizedColorMatrix =
-          cuda::GpuMat(
-            appState->config.targetResolutionY > 0 
-              ? 
-              appState->config.targetResolutionY
-              : height,
-            appState->config.targetResolutionX > 0 
-              ? 
-              appState->config.targetResolutionX
-              : width,
-            CV_8UC3);
-        
-        currentCudaFrameData->cpuResizedColorMatrix =
-          cv::Mat(
-            appState->config.targetResolutionY > 0 
-              ? 
-              appState->config.targetResolutionY
-              : height,
-            appState->config.targetResolutionX > 0 
-              ? 
-              appState->config.targetResolutionX
-              : width,
+    currentCudaFrameData->gpuResizedColorMatrix =
+        cuda::GpuMat(
+            appState->config.targetResolutionY > 0
+                ? appState->config.targetResolutionY
+                : height,
+            appState->config.targetResolutionX > 0
+                ? appState->config.targetResolutionX
+                : width,
             CV_8UC3);
 
-        #endif
+    currentCudaFrameData->cpuResizedColorMatrix =
+        cv::Mat(
+            appState->config.targetResolutionY > 0
+                ? appState->config.targetResolutionY
+                : height,
+            appState->config.targetResolutionX > 0
+                ? appState->config.targetResolutionX
+                : width,
+            CV_8UC3);
 
-      }
-    printf("SENSOR resolution to be fed into cv::cuda preprocessing:      %dx%d\n", 
-      appState->ximeaImageWidth, appState->ximeaImageHeight);
-    printf("GPU-cropped resolution to be fed into GStreamer: %dx%d\n", 
-      appState->cudaFrameDataArray[0].cropRectangle.width, 
-      appState->cudaFrameDataArray[0].cropRectangle.height);
-    
-    //}
+#endif
+  }
+  printf("SENSOR resolution to be fed into cv::cuda preprocessing:      %dx%d\n",
+         appState->ximeaImageWidth, appState->ximeaImageHeight);
+  printf("GPU-cropped resolution to be fed into GStreamer: %dx%d\n",
+         appState->cudaFrameDataArray[0].cropRectangle.width,
+         appState->cudaFrameDataArray[0].cropRectangle.height);
 
-
-
-
-
-
-    // Start the image acquisition
-    xiStatus = xiStartAcquisition(appState->xiH);
-    if (xiStatus != XI_OK)
-    {
-      throw "Starting image acquisition failed";
-    }
-    
+  //}
 
 
-    if(appState->config.doLocalDisplay)
-    {
-        // Create a GUI window with OpenGL support
-        namedWindow("XIMEA camera", WINDOW_OPENGL);
-        // OpenGL window makes problems!
-        //namedWindow("XIMEA camera");
-        resizeWindow("XIMEA camera", 
-          appState->ximeaImageWidth/4, 
-          appState->ximeaImageHeight/4);
-        //resizeWindow("XIMEA camera", 1600 , 1000);
-    }
- 
-    // Define pointer used for (CUDA) data on GPU
-    //void *imageGpu;
+  //TODO do cuda error checking
+  return true;
 
-
-    runAcquisitionLoop(appState);
-  
-
-
-
-    
-    // Stop image acquitsition and close device
-    xiStopAcquisition(appState->xiH);
-    xiCloseDevice(appState->xiH); 
-
-    delete appState;
-     
-    // Print errors
-   }catch(const char* message)
-   {
-    std::cerr << message << std::endl;
-   }
 
 }
 
@@ -864,23 +904,5 @@ int main(int argc, char **argv)
 
 
 
-//typedef void(* 	StreamCallback) (int status, void *userData)
-void cudaDemosaicStreamCallback(int status, void *userData)
-{
-    if(status != cudaSuccess)
-    {
-        printf("%s","Error in Cuda stream! Aborting");
-        exit(1);
-    }
-    
-    CudaFrameData * currentCudaFrameData = 
-      static_cast<CudaFrameData *>(userData);
-     
-    
-    currentCudaFrameData->appStatePtr->cuda_processed_frame_count ++;
-    
 
-    //free slot for reusal:
-    currentCudaFrameData->slotIsUsed=false;
-}
 
