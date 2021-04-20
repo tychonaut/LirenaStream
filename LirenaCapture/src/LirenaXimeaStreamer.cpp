@@ -622,7 +622,10 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 					printf("DEBUG: Appsrc has bayer caps!;\n");
 					appsrc_video_caps = gst_caps_new_simple(
 						"video/x-bayer",
-						"format", G_TYPE_STRING, "bggr",
+						//"format", G_TYPE_STRING, "bggr", // this works with the original resolution!
+						"format", G_TYPE_STRING, "grbg", // WFTZ this works with resolution halfing!
+						//"format", G_TYPE_STRING, "gbrg",
+						//"format", G_TYPE_STRING, "rggb",
 						"bpp", G_TYPE_INT, 8,
 						"depth", G_TYPE_INT, 8,
 						"framerate", GST_TYPE_FRACTION, 0, 1,
@@ -639,6 +642,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 						"bpp", G_TYPE_INT, 32,
 						"depth", G_TYPE_INT, 24,
 						"endianness", G_TYPE_INT, G_BIG_ENDIAN,
+						//"endianness", G_TYPE_INT, G_LITTLE_ENDIAN,
 						"red_mask", G_TYPE_INT, 0x0000ff00,
 						"green_mask", G_TYPE_INT, 0x00ff0000,
 						"blue_mask", G_TYPE_INT, 0xff000000,
