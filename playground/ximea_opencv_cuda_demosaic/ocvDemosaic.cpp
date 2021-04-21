@@ -322,24 +322,21 @@ int main(int argc, char **argv)
     appState->xiCam.startAcquisition();
 
 
-
-    if(appState->config.doLocalDisplay)
-    {
-        // Create a GUI window with OpenGL support
-        namedWindow("XIMEA camera", WINDOW_OPENGL);
-        // OpenGL window makes problems!
-        //namedWindow("XIMEA camera");
-        resizeWindow( 
-          "XIMEA camera", 
-          appState->config.getStreamingResolutionX()/4,
-          appState->config.getStreamingResolutionY()/4
-        );
-        //resizeWindow("XIMEA camera", 1600 , 1000);
-    }
+    // display is now done by gstreamer
+    // if(appState->config.doLocalDisplay)
+    // {
+    //     // Create a GUI window with OpenGL support
+    //     namedWindow("XIMEA camera", WINDOW_OPENGL);
+    //     // OpenGL window makes problems!
+    //     //namedWindow("XIMEA camera");
+    //     resizeWindow( 
+    //       "XIMEA camera", 
+    //       appState->config.getStreamingResolutionX()/4,
+    //       appState->config.getStreamingResolutionY()/4
+    //     );
+    //     //resizeWindow("XIMEA camera", 1600 , 1000);
+    // }
  
-    // Define pointer used for (CUDA) data on GPU
-    //void *imageGpu;
-
 
 
 
@@ -594,42 +591,43 @@ bool runAcquisitionLoop(HackApplication * appState)
         }
         //}  --------------------------------------------------------------------
 
-        if (appState->config.doLocalDisplay)
-        {
-          // Render image to the screen (using OpenGL)
-          //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
+        // display is now done by gstreamer
+        // if (appState->config.doLocalDisplay)
+        // {
+        //   // Render image to the screen (using OpenGL)
+        //   //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
 
-          //only show every nth frame:
-          //if(appState->cuda_processed_frame_count % 3 == 0)
-          {
-            //block for show:
-            appState->cudaDemoisaicStream.waitForCompletion();
+        //   //only show every nth frame:
+        //   //if(appState->cuda_processed_frame_count % 3 == 0)
+        //   {
+        //     //block for show:
+        //     appState->cudaDemoisaicStream.waitForCompletion();
             
-            #if SHOW_CPUMAT_INSTEAD_GPUMAT 
+        //     #if SHOW_CPUMAT_INSTEAD_GPUMAT 
       
-              imshow("XIMEA camera", 
-                //currentCudaFrameData->gpuColorMatrix
-                #if DO_USE_CROP_INSTEAD_RESIZE
-                  currentCudaFrameData->cpuCroppedColorMatrix
-                #else // DO_USE_CROP_INSTEAD_RESIZE
-                  currentCudaFrameData->cpuResizedColorMatrix
-                #endif // DO_USE_CROP_INSTEAD_RESIZE
-              );
+        //       imshow("XIMEA camera", 
+        //         //currentCudaFrameData->gpuColorMatrix
+        //         #if DO_USE_CROP_INSTEAD_RESIZE
+        //           currentCudaFrameData->cpuCroppedColorMatrix
+        //         #else // DO_USE_CROP_INSTEAD_RESIZE
+        //           currentCudaFrameData->cpuResizedColorMatrix
+        //         #endif // DO_USE_CROP_INSTEAD_RESIZE
+        //       );
             
-            #else // SHOW_CPUMAT_INSTEAD_GPUMAT
+        //     #else // SHOW_CPUMAT_INSTEAD_GPUMAT
 
-              imshow("XIMEA camera", 
-                //currentCudaFrameData->gpuColorMatrix
-                #if DO_USE_CROP_INSTEAD_RESIZE
-                currentCudaFrameData->gpuCroppedColorMatrix
-                #else // DO_USE_CROP_INSTEAD_RESIZE
-                currentCudaFrameData->gpuResizedColorMatrix
-                #endif // DO_USE_CROP_INSTEAD_RESIZE
-              );
+        //       imshow("XIMEA camera", 
+        //         //currentCudaFrameData->gpuColorMatrix
+        //         #if DO_USE_CROP_INSTEAD_RESIZE
+        //         currentCudaFrameData->gpuCroppedColorMatrix
+        //         #else // DO_USE_CROP_INSTEAD_RESIZE
+        //         currentCudaFrameData->gpuResizedColorMatrix
+        //         #endif // DO_USE_CROP_INSTEAD_RESIZE
+        //       );
 
-            #endif // SHOW_CPUMAT_INSTEAD_GPUMAT 
-       }
-     }
+        //     #endif // SHOW_CPUMAT_INSTEAD_GPUMAT 
+        //   }
+        // }
 
 
       

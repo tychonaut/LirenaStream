@@ -34,13 +34,14 @@ ninja -C build/
 __GL_SYNC_TO_VBLANK=0 \
 GST_DEBUG=2 \
 ./build/ocvDemosaic \
-     192.168.1.101 5001 \
+     192.168.0.102 5001 \
      --targetResolutionX=${myResX} \
      --targetResolutionY=${myResY} \
      --exposure=4 \
-     $@
+     --output=myAss2.mpg \
+     $@ \
+     --localdisplay \
 
 exit 0
 
-#     --localdisplay
 

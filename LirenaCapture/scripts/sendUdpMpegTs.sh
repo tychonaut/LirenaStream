@@ -12,7 +12,7 @@ GST_DEBUG=2,appsrc:4,mpegtsmux:0,tcpserversink:3  \
 __GL_SYNC_TO_VBLANK=0 \
 ./builddir/lirenaCapture \
     ${receiverIP} 5001 \
-    --exposure=40  \
+    --exposure=4  \
     $@ \
     
     
