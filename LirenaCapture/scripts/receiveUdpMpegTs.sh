@@ -33,8 +33,12 @@ gst-launch-1.0 \
   avdec_h264 !   \
   videoconvert !   \
   videoscale !   \
-    video/x-raw,width=2664,height=2304 ! \
+    video/x-raw,width=2048,height=1556 ! \
   fpsdisplaysink  video-sink="xvimagesink" sync=false async-handling=true \
+
+exit 0
+
+#klv not works atm with "expanded standalone app"
   \
   myTsDemux. ! \
     meta/x-klv,parsed=true ! \
@@ -50,7 +54,6 @@ gst-launch-1.0 \
     filesink location=fromUdp_remoteOutput_010.klv sync=true async=true
     
     
-exit 0
 
 
   xvimagesink \

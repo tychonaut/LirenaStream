@@ -19,6 +19,10 @@ gst-launch-1.0  \
     avdec_h264 output-corrupt=false  !   \
     videoconvert !  \
     xvimagesink   sync=true async=true \
+
+exit 0
+
+
   \
   myT1. ! \
     queue ! \
@@ -36,5 +40,4 @@ gst-launch-1.0  \
     
     
     
-exit 0
 
