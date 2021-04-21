@@ -32,7 +32,7 @@ myResY=3112
 ninja -C build/ 
 
 __GL_SYNC_TO_VBLANK=0 \
-GST_DEBUG=4 \
+GST_DEBUG=2 \
 ./build/ocvDemosaic \
      192.168.1.101 5001 \
      --targetResolutionX=${myResX} \
@@ -42,4 +42,5 @@ GST_DEBUG=4 \
 
 exit 0
 
-     --localdisplay
+#     --localdisplay
+

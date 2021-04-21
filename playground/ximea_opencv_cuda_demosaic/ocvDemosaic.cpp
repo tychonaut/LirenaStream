@@ -65,7 +65,7 @@ const int global_decimationMultiplierToSet = 1;
 // rather skip frames
 // "2" works for 2k@140FPS, but there is some jam in the beginning.
 // "6" works without jam for 2k@140FPS,
-#define MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 12
+#define MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 6
 #define STATUS_STRING_LENGTH 4096
 
 
@@ -117,7 +117,6 @@ struct HackApplication
         
     // for asynchronous processing of CUDA stuff: has to be initialized
     cv::cuda::Stream cudaDemoisaicStream;
-    
     // minimalistic memory pool for GPU matrix objects, used by cuda stream
     CudaFrameData* cudaFrameDataArray; //[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
     
@@ -138,11 +137,12 @@ struct HackApplication
     //}
 };
 
+
 struct CudaFrameData
 {   
     CudaFrameData()
     : bufferIndex(0),
-      slotIsUsed(false),
+      slotIsUsedInPreprocessing(false),
       cudaHostMemoryForXiImage(nullptr),
       hostRawMat(),
       cropRectangle()
@@ -174,11 +174,11 @@ struct CudaFrameData
     }
 
 
-    HackApplication* appStatePtr;
+    HackApplication* appPtr;
 
     int bufferIndex; // backtracking into HackApplication::cudaFrameDataArray
     // Status flag: Is data slot used by cuda right now?
-    bool slotIsUsed; 
+    bool slotIsUsedInPreprocessing; 
     
     //pointer to CUDA host data where the Ximea captured frame is mapped to
     void* cudaHostMemoryForXiImage; 
@@ -206,7 +206,11 @@ struct CudaFrameData
     // and has to stay alive until gstreamer dosn't need it anymore.
     // TODO check how to create and manage GstBufferPool to omit permanent new allocations!
     gchar * cpuCroppedColorMatrix_selfAllocedHeapMem = nullptr;
+    
     cv::Mat cpuCroppedColorMatrix;
+
+    //cv::Mat cpuCroppedColorMatrix;
+
 
     //} 
     # else
@@ -220,6 +224,22 @@ struct CudaFrameData
 
 };
 
+
+// // for gstreamer
+// struct MatPool
+// {
+//   MatPool(LirenaConfig* config)
+//   :
+//   {}
+
+//   LirenaConfig* config;
+
+//   cv::Mat mats[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
+//   bool slotIsUsed[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
+
+// };
+
+//void (*GDestroyNotify) (gpointer data);
 
 //-----------------------------------------------------------------------------
 
@@ -250,20 +270,32 @@ void cudaDemosaicStreamCallback(int status, void *userData)
       static_cast<CudaFrameData *>(userData);
      
     
-    currentCudaFrameData->appStatePtr->cuda_processed_frame_count ++;
+    currentCudaFrameData->appPtr->cuda_processed_frame_count ++;
     
 
-    //free slot for reusal:
-    currentCudaFrameData->slotIsUsed=false;
 
 
+
+
+    //-------------------------------------------------
+    // push to gstreamer
+
+    currentCudaFrameData->appPtr->streamer.pushCvMatToGstreamer(
+      currentCudaFrameData->cpuCroppedColorMatrix,
+      &currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem
+    );
 
     //TODO push to gst via appsrc
+
+
+
+    //free slot for reusal:
+    currentCudaFrameData->slotIsUsedInPreprocessing=false;
 }
 
 
 
-
+ 
 
 
 
@@ -350,14 +382,14 @@ bool runAcquisitionLoop(HackApplication * appState)
       while(currentGpuMatIndex < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES)
       {
         // is slot already used?
-        if(appState->cudaFrameDataArray[currentGpuMatIndex].slotIsUsed)
+        if(appState->cudaFrameDataArray[currentGpuMatIndex].slotIsUsedInPreprocessing)
         {
             currentGpuMatIndex++;
         }
         else
         {
           // set slot to "used" and stop checking the rest
-          appState->cudaFrameDataArray[currentGpuMatIndex].slotIsUsed = 
+          appState->cudaFrameDataArray[currentGpuMatIndex].slotIsUsedInPreprocessing = 
             true;
           break;
         }
@@ -381,7 +413,7 @@ bool runAcquisitionLoop(HackApplication * appState)
         & (appState->cudaFrameDataArray[currentGpuMatIndex]);
 
       currentCudaFrameData->bufferIndex = currentGpuMatIndex;
-      currentCudaFrameData->slotIsUsed = true;
+      currentCudaFrameData->slotIsUsedInPreprocessing = true;
         
 
       //{ Blocking impl:
@@ -438,7 +470,7 @@ bool runAcquisitionLoop(HackApplication * appState)
         currentCudaFrameData->gpuCroppedRawMatrixRef, 
         currentCudaFrameData->gpuCroppedColorMatrix, 
         appState->xiCam.getOcvBayerPattern(), 
-        0, // derive channel layout from other params
+        4,  //four channels, because nvvidconv and segfaults   //0, // derive channel layout from other params
         appState->cudaDemoisaicStream 
       );
 
@@ -523,6 +555,8 @@ bool runAcquisitionLoop(HackApplication * appState)
             cudaDemosaicStreamCallback, // StreamCallback 	callback,
             currentCudaFrameData        // void * 	userData
         );
+
+
 
         //{ FPS calcs: ----------------------------------------------------------
         appState->current_captured_frame_count++;
@@ -624,7 +658,7 @@ bool lirena_setupCudaState(HackApplication *appState)
     CudaFrameData *currentCudaFrameData =
         &(appState->cudaFrameDataArray[i]);
 
-    currentCudaFrameData->appStatePtr = appState;
+    currentCudaFrameData->appPtr = appState;
 
     currentCudaFrameData->setupCropRect(&appState->config);
 
@@ -647,7 +681,11 @@ bool lirena_setupCudaState(HackApplication *appState)
         cuda::GpuMat(
             currentCudaFrameData->cropRectangle.height,
             currentCudaFrameData->cropRectangle.width,
-            CV_8UC3);
+            //CV_8UC3
+            // test because segfault
+            CV_8UC4
+
+    );
 
     // currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem =
     //     (gchar *)g_malloc(
@@ -664,7 +702,7 @@ bool lirena_setupCudaState(HackApplication *appState)
             // need to be 32bit RGBx/GBRx/xRGB for nvvidconv
             CV_8UC4
             //,
-            ////provide self-managed memory
+            //provide self-managed memory
             //currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem
     );
 

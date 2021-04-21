@@ -14,56 +14,43 @@ namespace cv
 class LirenaHackStreamer
 {
     public:
-    explicit LirenaHackStreamer(LirenaConfig const * config)
-        : config(config)
-    {
-        // n.b. gst_init has been called in main();
 
-        //debug:
-        gchar* pipeString = constructMinimalPipelineString();
-        //gchar* pipeString = constructPipelineString();;
+        explicit LirenaHackStreamer(LirenaConfig const * config);
+        ~LirenaHackStreamer();
 
-        pipeline = gst_parse_launch(
-		    pipeString,
-		    NULL);
-        g_assert(pipeline);
+        //to be called by cuda "completion callback"
+        bool pushCvMatToGstreamer(
+            cv::Mat& cpuMat, 
+            // maybe not nececcary, 
+            //but keep track of self-alloced mem this way:
+            gchar** ptrToSelfAllocedMemoryPtr);
 
-        printf("%s\n", "pipeline created");
+    private:
+ 
+        // returns PTS (presentation timestamp)
+        // according to GstClock
+        // called by pushCvMatToGstreamer(..)
+        GstClockTime calcTimings();
 
-        //TODO setup appsource etc;
+        // return value must be g_free'ed
+        gchar* constructPipelineString();
+        // return value must be g_free'ed
+        gchar* constructMinimalPipelineString();
 
-        g_free(pipeString);
+        
 
-        gst_element_set_state (pipeline, GST_STATE_PLAYING);
+        //member variables:
 
-        //GMainLoop* mainloop = g_main_loop_new(NULL, false);
-        //g_main_loop_run(mainloop);
+        LirenaConfig const * config;
 
-        //g_main_
-    }
+        GstElement *pipeline = nullptr;
+        GstElement *appsrc_video = nullptr;
 
-    ~LirenaHackStreamer()
-    {
-
-    }
-
-
-    // return value must be g_free'ed
-    gchar* constructPipelineString();
-
-    // return value must be g_free'ed
-    gchar* constructMinimalPipelineString();
-
-
-    bool pushCvMatToGstreamer(cv::Mat& cpuMat);
-
-    //member variables:
-
-    LirenaConfig const * config;
-
-    GstElement *pipeline = nullptr;
-	GstElement *appsrc_video = nullptr;
-
+        //{ PTP stuff: TODO setup and use
+        GstClock * createGstPTPclock();
+        GstClock * syncGstPTPclock();
+        GstClock * myGstPTPclock = nullptr;
+        //}
 };
 
 

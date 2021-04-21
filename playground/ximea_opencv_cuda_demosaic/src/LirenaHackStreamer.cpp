@@ -2,6 +2,47 @@
 
 #include <unistd.h> //sleep
 
+
+#include <opencv2/opencv.hpp>
+
+
+
+
+
+
+
+LirenaHackStreamer::LirenaHackStreamer(LirenaConfig const *config)
+    : config(config)
+{
+    // n.b. gst_init has been called in main();
+
+    //debug:
+    gchar *pipeString = constructMinimalPipelineString();
+    //gchar* pipeString = constructPipelineString();;
+
+    pipeline = gst_parse_launch(
+        pipeString,
+        NULL);
+    g_assert(pipeline);
+
+    printf("%s\n", "pipeline created");
+
+    //TODO setup appsource etc;
+
+    g_free(pipeString);
+
+    gst_element_set_state(pipeline, GST_STATE_PLAYING);
+
+    //GMainLoop* mainloop = g_main_loop_new(NULL, false);
+    //g_main_loop_run(mainloop);
+
+    //g_main_
+}
+
+LirenaHackStreamer::~LirenaHackStreamer()
+{
+}
+
 // sixteen thousand chars are hopefully sufficient...
 #define MAX_GSTREAMER_PIPELINE_STRING_LENGTH 16384
 #define MAX_GSTREAMER_PIPELINE_SNIPPET_STRING_LENGTH 1024
@@ -16,11 +57,17 @@ gchar *LirenaHackStreamer::constructMinimalPipelineString()
         gstreamerPipelineString,
         (gulong)MAX_GSTREAMER_PIPELINE_STRING_LENGTH,
 
-        " appsrc format=GST_FORMAT_TIME is-live=TRUE name=videoAppSrc ! "
-        "   video/x-raw, format=(string)BGRx,width=%d,height=%d ! "
-
-        " videotestsrc do-timestamp=true ! " // num-buffers=%d  
-        "    video/x-raw  format=(string)BGRx !" 
+         " appsrc format=GST_FORMAT_TIME is-live=TRUE name=videoAppSrc ! "
+         //"   video/x-raw,format=(string)RGBA,width=%d,height=%d ! " //format=(string)BGRx,
+         //"   video/x-raw,format=(string)RGBA,width=%d,height=%d ! "
+	     "  video/x-raw,format=(string)BGRx,"
+                "bpp=(int)32,depth=(int)24,"
+                "endianness=(int)%d,"
+                "red_mask=0xff000000,green_mask=0x0000ff00,blue_mask=0x0000ff00,"
+                "width=%d,height=%d,framerate=0/1 ! "
+				
+        //" videotestsrc do-timestamp=true ! " // num-buffers=%d  
+        //"    video/x-raw  format=(string)BGRx !" 
                     //,width=${myStreamingResX},height=${myStreamingResY},framerate=${myTargetFPS}/1 ! "
 
         //" nvvidconv ! "
@@ -32,17 +79,20 @@ gchar *LirenaHackStreamer::constructMinimalPipelineString()
         //"   queue max-size-bytes=1000000000 ! "
         //"   nvivafilter cuda-process=true customer-lib-name=libnvsample_cudaprocess.so ! "
         //"     video/x-raw(memory:NVMM),format=(string)NV12 ! "
-        "   nvvidconv ! "
-        "     video/x-raw(memory:NVMM),format=(string)NV12,width=840,height=525 ! " //,framerate=${myTargetFPS}/1 ! "
-        "  nvoverlaysink display-id=0 overlay-x=840 overlay-y=0 overlay-w=840 overlay-h=525  "
         
-        // " videoscale ! "
-        // " videoconvert ! "
-        // " xvimagesink "
+        //"   nvvidconv ! "
+        //"     video/x-raw(memory:NVMM),format=(string)NV12,width=840,height=525 ! " //,framerate=${myTargetFPS}/1 ! "
+        //"  nvoverlaysink display-id=0 overlay-x=840 overlay-y=0 overlay-w=840 overlay-h=525  "
+        
+         " videoscale ! "
+         " videoconvert ! "
+         " xvimagesink "
         
         //"autovideosink"
         
-        "",
+        ""
+        ,
+        G_BIG_ENDIAN,
         this->config->getStreamingResolutionX(),
         this->config->getStreamingResolutionY()
         //12 // nun total buffers
@@ -83,15 +133,6 @@ gchar *LirenaHackStreamer::constructMinimalPipelineString()
     //     //12 // nun total buffers
     // );
 }
-
-bool LirenaHackStreamer::pushCvMatToGstreamer(cv::Mat &cpuMat)
-{
-
-    //TODO
-
-    return false;
-}
-
 
 
 
@@ -273,4 +314,132 @@ gchar *LirenaHackStreamer::constructPipelineString()
     sleep(1);
 
     return gstreamerPipelineString;
+}
+
+
+
+
+bool LirenaHackStreamer::pushCvMatToGstreamer(
+    cv::Mat &cpuMat,
+    gchar** ptrToSelfAllocedMemoryPtr)
+{
+    appsrc_video = gst_bin_get_by_name(GST_BIN(pipeline), "videoAppSrc");
+    //g_assert(appsrc_video);
+
+    //{ Clock/timestamp  stuff:
+    //https://stackoverflow.com/questions/34294755/mux-klv-data-with-h264-by-mpegtsmux
+    GstClock *clock = nullptr;
+    GstClockTime abs_time, base_time;
+    //TODO try with appscr instead of pipeline
+    GST_OBJECT_LOCK(pipeline);
+    // TODO try gst_pipeline_get_pipeline_clock
+    clock = GST_ELEMENT_CLOCK(pipeline);
+    if (!clock)
+    {
+        GST_ERROR("%s", "NO CLOCK");
+        exit(1);
+    }
+    base_time = GST_ELEMENT(pipeline)->base_time;
+    gst_object_ref(clock);
+    abs_time = gst_clock_get_time(clock);
+    gst_object_unref(clock);
+    GST_OBJECT_UNLOCK(pipeline);
+    guint64 myPTS_timestamp = abs_time - base_time;
+    GST_DEBUG("myPTS_timestamp: %lu", myPTS_timestamp);
+    //}
+
+
+    cv::Size siz = cpuMat.size();
+    gsize buffSize = siz.height * siz.width * 4; //RGBA or whatever
+    GstBuffer* video_frame_GstBuffer = gst_buffer_new_allocate(
+        0,
+        buffSize, 
+        0
+    );
+    gst_buffer_fill(
+        video_frame_GstBuffer,
+        0, //offset
+        cpuMat.data, // gconstpointer src,
+        buffSize
+    );
+    
+    GST_BUFFER_PTS(video_frame_GstBuffer) = myPTS_timestamp;
+	//GST_BUFFER_DURATION (video_frame_GstBuffer) = myDuration;
+
+	// push buffer into gstreamer pipeline
+	GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC(appsrc_video), video_frame_GstBuffer);
+    g_assert(ret == GST_FLOW_OK);
+
+
+
+    // // kind of workaround for not understanding GstBufferPool in the short time:
+    // // the image memory of cpuMat was passed to gstreamer and will be deleted
+    // // when gstreamer is done with it;
+    // // (idea for later: maybe we can trick gstreamer into not deleting by 
+    // // gst_ref()'ing  the buffer; but then, it will not be destroayed and there 
+    // // will be no callback to inform us that it can bbe reused... damn)
+
+
+    // static gchar* pointerGraveYard[1000000];
+    // static int currentFrame = 0;
+
+ 
+
+
+    // gchar* newMemory = (gchar *)malloc(
+    //        siz.height
+    //        *
+    //        siz.width
+    //        *
+    //        4 //RGBA or whatever
+    //     );
+    // g_assert(newMemory);
+
+    // memset(newMemory, 255,  siz.height
+    //        *
+    //        siz.width
+    //        *
+    //        4 );
+
+
+    // pointerGraveYard[currentFrame] = *ptrToSelfAllocedMemoryPtr;
+    // printf("currentFrame: %d, old pointer adress: %lu, value in memory: %lu \n",
+    //     currentFrame,
+    //     (guint64) pointerGraveYard[currentFrame],
+    //     (guint64) pointerGraveYard[currentFrame][1000000]
+    // );
+    // currentFrame++;
+
+    // g_free(*ptrToSelfAllocedMemoryPtr);
+
+
+    // *ptrToSelfAllocedMemoryPtr =
+    //     newMemory;
+    // g_assert(*ptrToSelfAllocedMemoryPtr);
+    
+    // // cpuMat.release();
+
+    // // //destroy old Mat instance (image mem will not be deleted,
+    // // // as manually alloc'ed), re-init with new memory
+    // // cpuMat =
+    // //     cv::Mat(
+    // //         siz,
+    // //         //CV_8UC3
+    // //         // need to be 32bit RGBx/GBRx/xRGB for nvvidconv
+    // //         CV_8UC4
+    // //         ,
+    // //         //provide self-managed memory
+    // //         *ptrToSelfAllocedMemoryPtr
+    // // );
+
+
+    return true;
+}
+
+
+GstClockTime LirenaHackStreamer::calcTimings()
+{
+    g_assert("TODO implement");
+
+    return 0;
 }
