@@ -191,7 +191,7 @@ bool LirenaHackXimeaCamera::setupTriggerParams()
 
   XI_RETURN xiStatus = XI_OK;
 
-  printf("TODO implement LirenaHackXimeaCamera::setupTriggerParams()");
+  printf("TODO implement LirenaHackXimeaCamera::setupTriggerParams()\n");
 
 
   return xiStatus == XI_OK;

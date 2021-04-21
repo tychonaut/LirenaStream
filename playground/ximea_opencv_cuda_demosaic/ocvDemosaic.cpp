@@ -707,13 +707,6 @@ bool lirena_setupCudaState(HackApplication *appState)
     );
 
 
-    printf("SENSOR resolution to be fed into cv::cuda preprocessing:      %dx%d\n",
-      appState->config.ximeaparams.activeSensorResolutionX,
-      appState->config.ximeaparams.activeSensorResolutionY
-    );
-    printf("GPU-cropped resolution to be fed into GStreamer:              %dx%d\n",
-          appState->cudaFrameDataArray[0].cropRectangle.width,
-          appState->cudaFrameDataArray[0].cropRectangle.height);
 
 
 #else
@@ -743,6 +736,14 @@ bool lirena_setupCudaState(HackApplication *appState)
 
 #endif
   }
+
+    printf("SENSOR resolution to be fed into cv::cuda preprocessing:      %dx%d\n",
+      appState->config.ximeaparams.activeSensorResolutionX,
+      appState->config.ximeaparams.activeSensorResolutionY
+    );
+    printf("GPU-cropped resolution to be fed into GStreamer:              %dx%d\n",
+          appState->cudaFrameDataArray[0].cropRectangle.width,
+          appState->cudaFrameDataArray[0].cropRectangle.height);
 
 
   //}

@@ -80,13 +80,14 @@ gchar *LirenaHackStreamer::constructMinimalPipelineString()
         //"   nvivafilter cuda-process=true customer-lib-name=libnvsample_cudaprocess.so ! "
         //"     video/x-raw(memory:NVMM),format=(string)NV12 ! "
         
-        //"   nvvidconv ! "
-        //"     video/x-raw(memory:NVMM),format=(string)NV12,width=840,height=525 ! " //,framerate=${myTargetFPS}/1 ! "
-        //"  nvoverlaysink display-id=0 overlay-x=840 overlay-y=0 overlay-w=840 overlay-h=525  "
+        "   nvvidconv ! "
+        "     video/x-raw(memory:NVMM),format=(string)NV12,width=840,height=525 ! " //,framerate=${myTargetFPS}/1 ! "
+        "   queue ! "
+        "   nvoverlaysink display-id=0 overlay-x=840 overlay-y=0 overlay-w=840 overlay-h=525  "
         
-         " videoscale ! "
-         " videoconvert ! "
-         " xvimagesink "
+        //  " videoscale ! "
+        //  " videoconvert ! "
+        //  " xvimagesink "
         
         //"autovideosink"
         
@@ -98,7 +99,7 @@ gchar *LirenaHackStreamer::constructMinimalPipelineString()
         //12 // nun total buffers
     );
 
-    printf("HERE IS THE GSTREAMER PIPELINE\n\n: %s\n\n", gstreamerPipelineString);
+    printf("\nHERE IS THE GSTREAMER PIPELINE:\n\n: %s\n\n", gstreamerPipelineString);
 
     return gstreamerPipelineString;
 
@@ -351,17 +352,45 @@ bool LirenaHackStreamer::pushCvMatToGstreamer(
 
     cv::Size siz = cpuMat.size();
     gsize buffSize = siz.height * siz.width * 4; //RGBA or whatever
-    GstBuffer* video_frame_GstBuffer = gst_buffer_new_allocate(
-        0,
-        buffSize, 
-        0
-    );
-    gst_buffer_fill(
+
+
+
+
+    // GstBuffer* video_frame_GstBuffer = gst_buffer_new_allocate(
+    //     0,
+    //     buffSize, 
+    //     0
+    // );
+    // gst_buffer_fill(
+    //     video_frame_GstBuffer,
+    //     0, //offset
+    //     cpuMat.data, // gconstpointer src,
+    //     buffSize
+    // );
+
+    // hack: can go wrong if cuda reuses this mem before gst is done with it.
+    // but a similar hack seems to work with the XI_IMG::bp ...
+    // TODO tackle the details of buffer pool:
+    // create pool at program startup, assign cpuMat with its memory
+    // download GPU stuff directly into the bufferpooled memory
+    GstBuffer * video_frame_GstBuffer = gst_buffer_new();
+	gst_buffer_insert_memory(
         video_frame_GstBuffer,
-        0, //offset
-        cpuMat.data, // gconstpointer src,
-        buffSize
+		-1,
+		gst_memory_new_wrapped(
+		    GST_MEMORY_FLAG_READONLY,
+			(guint8 *) cpuMat.data,
+			buffSize,
+			0,
+			buffSize,
+			0,
+			0)
     );
+
+
+
+
+
     
     GST_BUFFER_PTS(video_frame_GstBuffer) = myPTS_timestamp;
 	//GST_BUFFER_DURATION (video_frame_GstBuffer) = myDuration;
