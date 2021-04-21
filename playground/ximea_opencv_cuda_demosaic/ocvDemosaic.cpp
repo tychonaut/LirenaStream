@@ -1,6 +1,10 @@
 
 #include "LirenaConfig.h"
 
+#include "LirenaHackXimeaCamera.h"
+#include "LirenaHackStreamer.h"
+
+
 #include <m3api/xiApi.h>
 
 #include <iostream>
@@ -11,6 +15,8 @@
 #include "opencv2/cudawarping.hpp" //cuda::resize
 #include <cuda_runtime.h>
 
+#include <gst/gst.h>
+
 #include <sys/time.h>
 
  #include <unistd.h> // usleep
@@ -20,10 +26,11 @@
 
 //{Hack: too little time to use CLI args ...
 
-//set to 0 to get rid of overhead of setting up the GUI/showing the image
-//#define DO_SHOW_IMAGE 0
+
 #define DO_USE_SENSOR_DECIMATION 0
+
 #define DO_USE_CROP_INSTEAD_RESIZE 1
+
 // add a GPU->CPU download to simulate non-nvivafilter-gstreamer interface
 #define SHOW_CPUMAT_INSTEAD_GPUMAT 1
 
@@ -35,13 +42,12 @@
 #define WB_RED 1.3
 
 #if DO_USE_SENSOR_DECIMATION
-# define decimationMultiplierToSet 2
+const int global_decimationMultiplierToSet = 2;
 #else
-# define decimationMultiplierToSet 1
+const int global_decimationMultiplierToSet = 1;
 #endif
 
-#define targetScaledResX 3840
-#define targetScaledResY 2160
+
 
 
 
@@ -53,13 +59,13 @@
 
 
 // Define the number of images acquired, processed and shown in this example
-#define NUMBER_OF_IMAGES 10000
+//#define NUMBER_OF_IMAGES 10000
 
 // don't let RAM overflow and let latency explode unrecoverably,
 // rather skip frames
 // "2" works for 2k@140FPS, but there is some jam in the beginning.
 // "6" works without jam for 2k@140FPS,
-#define MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 12
+#define MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES 6
 #define STATUS_STRING_LENGTH 4096
 
 
@@ -68,28 +74,55 @@ using namespace cv;
 using namespace std;
 
 struct CudaFrameData;
+struct HackApplication;
 
 
 
+//-----------------------------------------------------------------------------
+//typedef void(* 	StreamCallback) (int status, void *userData)
+
+int main(int argc, char **argv);
+bool lirena_setCamParams(HackApplication * appState);
+bool lirena_setCamDownsamplingParams(HANDLE xiH);
+bool lirena_setupCudaState(HackApplication *appState);
+bool runAcquisitionLoop(HackApplication * appState);
+void cudaDemosaicStreamCallback(int status, void *userData);
+
+//-----------------------------------------------------------------------------
+
+
+
+//-----------------------------------------------------------------------------
 // init to zeros/false via memset
-struct StandaloneApplicationState
+struct HackApplication
 {
-    StandaloneApplicationState(int argc, char **argv)
-      : config(argc, argv)
+    HackApplication(int argc, char **argv)
+      : config(argc, argv),
+        xiCam(&config),
+        streamer(&config)
     {}
 
     LirenaConfig config;
 
+    LirenaHackXimeaCamera xiCam;
 
-    bool doDisplayProcessedImage; //yes, not showing anything is the default
+
+    LirenaHackStreamer streamer;
+
+    //resolution that comes form the sensor
+    //int ximeaImageWidth = -1;
+    //int ximeaImageHeight = -1;
+
+    bool doDisplayProcessedImage = false; //yes, not showing anything is the default
         
     // for asynchronous processing of CUDA stuff: has to be initialized
     cv::cuda::Stream cudaDemoisaicStream;
-    
     // minimalistic memory pool for GPU matrix objects, used by cuda stream
     CudaFrameData* cudaFrameDataArray; //[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
     
     
+
+    //{ timing stuff
     unsigned long current_time = 0;
     unsigned long prev_time = 0;
     
@@ -101,41 +134,39 @@ struct StandaloneApplicationState
     unsigned long lost_frames_count = 0;
     
     unsigned long cuda_processed_frame_count = 0;
-
+    //}
 };
 
+
 struct CudaFrameData
-{
-    CudaFrameData(int camImgHeight = -1, int camImgWidth = -1, 
-      LirenaConfig* configPtr = nullptr)
+{   
+    CudaFrameData()
     : bufferIndex(0),
-      slotIsUsed(false),
-      cudaHostMemory(nullptr),
+      slotIsUsedInPreprocessing(false),
+      cudaHostMemoryForXiImage(nullptr),
       hostRawMat(),
-      //hostRawMatInputArray()
       cropRectangle()
     {
-      setupCropRect(camImgHeight, camImgWidth, configPtr);
     }
 
 
-    bool setupCropRect(int camImgHeight = -1, int camImgWidth = -1, 
-      LirenaConfig* configPtr = nullptr)
+    bool setupCropRect(LirenaConfig* configPtr = nullptr)
     {
-      if(configPtr != nullptr && camImgHeight >0 &&  camImgWidth > 0)
+      if(configPtr != nullptr)
       {
+        g_assert(configPtr->ximeaparams.activeSensorResolutionY > 0);
+        g_assert(configPtr->ximeaparams.activeSensorResolutionX > 0);
+
         int cropRectH = configPtr->targetResolutionY > 0 
-                ? 
-                configPtr->targetResolutionY
-                : camImgHeight;
+                ? configPtr->targetResolutionY
+                : configPtr->ximeaparams.activeSensorResolutionY;
 
         int cropRectW = configPtr->targetResolutionX > 0 
-                ? 
-                configPtr->targetResolutionX
-                : camImgWidth;
+                ? configPtr->targetResolutionX
+                : configPtr->ximeaparams.activeSensorResolutionX;
 
-        int rectY = ( camImgHeight - cropRectH ) / 2;
-        int rectX = ( camImgWidth - cropRectW ) / 2;
+        int rectY = ( configPtr->ximeaparams.activeSensorResolutionY - cropRectH ) / 2;
+        int rectX = ( configPtr->ximeaparams.activeSensorResolutionX - cropRectW ) / 2;
 
         cropRectangle = cv::Rect(rectX, rectY , cropRectW, cropRectH);
       }
@@ -143,15 +174,15 @@ struct CudaFrameData
     }
 
 
-    StandaloneApplicationState* appStatePtr;
+    HackApplication* appPtr;
 
-    int bufferIndex; // backtracking into StandaloneApplicationState::cudaFrameDataArray
+    int bufferIndex; // backtracking into HackApplication::cudaFrameDataArray
     // Status flag: Is data slot used by cuda right now?
-    bool slotIsUsed; 
+    bool slotIsUsedInPreprocessing; 
     
     //pointer to CUDA host data where the Ximea captured frame is mapped to
-    void* cudaHostMemory; 
-    // wrappers for cudaHostMemory for async GPU upload
+    void* cudaHostMemoryForXiImage; 
+    // wrappers for cudaHostMemoryForXiImage for async GPU upload
     cv::Mat hostRawMat;
     //cv::InputArray hostRawMatInputArray;
     
@@ -162,25 +193,55 @@ struct CudaFrameData
     # if DO_USE_CROP_INSTEAD_RESIZE 
     cuda::GpuMat gpuCroppedRawMatrixRef;  // OpenCV+Cuda-representation of XIMEA image
     cuda::GpuMat gpuCroppedColorMatrix; // debayered result image
-    // hack, see cpuResizedColorMatrix
-    cv::Mat cpuCroppedColorMatrix;
-    //}
-    # else
-    //{ resize workflow
-    cuda::GpuMat gpuColorMatrix; // debayered result image
-    cuda::GpuMat gpuResizedColorMatrix; // debayered and resized result image
+
     // hack: read back from gpu to pass to gstreamer without hassle
     // (cause despite intense search I find no workaround-free way
     // to pass a GPU mat to a GstMemory;
     // workarounds are using stuff like EGL frames and interopping is with cv::GPUMat;
     //  no time for shis right now, unfortunately)
-    cv::Mat cpuResizedColorMatrix;
-    # endif
+    
+    // also self-alloc result matrix' CPU memory, so that it doesn't get destroyed
+    // when its containing cpuCroppedColorMatrix gets out of scope!
+    // we need this, because the memory will be wrpped by gstreamer memory and buffer,
+    // and has to stay alive until gstreamer dosn't need it anymore.
+    // TODO check how to create and manage GstBufferPool to omit permanent new allocations!
+    gchar * cpuCroppedColorMatrix_selfAllocedHeapMem = nullptr;
+    
+    cv::Mat cpuCroppedColorMatrix;
 
+    //cv::Mat cpuCroppedColorMatrix;
+
+
+    //} 
+    # else
+    //{ resize (resample) workflow
+    cuda::GpuMat gpuColorMatrix; // debayered result image
+    cuda::GpuMat gpuResizedColorMatrix; // debayered and resized result image
+
+    cv::Mat cpuResizedColorMatrix;
+    //}
+    # endif
 
 };
 
 
+// // for gstreamer
+// struct MatPool
+// {
+//   MatPool(LirenaConfig* config)
+//   :
+//   {}
+
+//   LirenaConfig* config;
+
+//   cv::Mat mats[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
+//   bool slotIsUsed[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
+
+// };
+
+//void (*GDestroyNotify) (gpointer data);
+
+//-----------------------------------------------------------------------------
 
 
 
@@ -194,12 +255,14 @@ inline unsigned long getcurus() {
 
 
 
+
+//-----------------------------------------------------------------------------
 //typedef void(* 	StreamCallback) (int status, void *userData)
 void cudaDemosaicStreamCallback(int status, void *userData)
 {
     if(status != cudaSuccess)
     {
-        printf("Error in Cuda stream! Aborting");
+        printf("%s","Error in Cuda stream! Aborting");
         exit(1);
     }
     
@@ -207,370 +270,123 @@ void cudaDemosaicStreamCallback(int status, void *userData)
       static_cast<CudaFrameData *>(userData);
      
     
-    currentCudaFrameData->appStatePtr->cuda_processed_frame_count ++;
+    currentCudaFrameData->appPtr->cuda_processed_frame_count ++;
     
 
-    //free slot for reusal:
-    currentCudaFrameData->slotIsUsed=false;
-}
 
 
 
 
+    //-------------------------------------------------
+    // push to gstreamer
 
-
-
-bool lirena_setDownsamplingParams(HANDLE xiH)
-{
-		
-	XI_RETURN xiStatus = XI_OK;
-
-
-    //"decimation"
-    int decimation_selector = 0;
-    xiGetParamInt(xiH, XI_PRM_DECIMATION_SELECTOR, &decimation_selector);
-    // is 0 (XI_DEC_SELECT_SENSOR), despite api saying 1  
-    printf("previous XI_PRM_DECIMATION_SELECTOR: %d\n",decimation_selector); 
-    xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_SELECTOR, 
-      XI_DEC_SELECT_SENSOR  // no error, but not works
-      //XI_BIN_SELECT_DEVICE_FPGA  //<-- returns XI_PARAM_NOT_SETTABLE             =114
-      //XI_BIN_SELECT_HOST_CPU
+    currentCudaFrameData->appPtr->streamer.pushCvMatToGstreamer(
+      currentCudaFrameData->cpuCroppedColorMatrix,
+      &currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem
     );
-    if(xiStatus != XI_OK)
-		{
-			printf(" XI_PRM_DECIMATION_SELECTOR, XI_DEC_SELECT_SENSOR: return value not XI_OK: %d\n", xiStatus);
-			sleep(4);
-		}
 
-
-    int decimation_pattern = 0;
-    int decimation_multiplier = 0;
-
-
-    xiGetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL_PATTERN, &decimation_pattern);
-    printf("previous XI_PRM_DECIMATION_VERTICAL_PATTERN: %d\n",decimation_pattern); 
-    xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL_PATTERN, XI_DEC_BAYER);
-    if(xiStatus != XI_OK)
-		{
-			printf(" XI_PRM_DECIMATION_VERTICAL_PATTERN, XI_DEC_BAYER: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
-    xiGetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, &decimation_multiplier);
-    printf("previous XI_PRM_DECIMATION_VERTICAL multiplier: %d\n",decimation_multiplier); 
-    xiSetParamInt(xiH, XI_PRM_DECIMATION_VERTICAL, decimationMultiplierToSet);
-    if(xiStatus != XI_OK)
-		{
-			printf(" XI_PRM_DECIMATION_VERTICAL := %d: return value not XI_OK: %d", decimationMultiplierToSet, xiStatus);
-			sleep(4);
-		}
+    //TODO push to gst via appsrc
 
 
 
-    xiGetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL_PATTERN, &decimation_pattern);
-    printf("previous XI_PRM_DECIMATION_HORIZONTAL_PATTERN: %d\n",decimation_pattern); 
-    xiStatus = xiSetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL_PATTERN, XI_DEC_BAYER);
-    if(xiStatus != XI_OK)
-		{
-			printf(" XI_PRM_DECIMATION_HORIZONTAL_PATTERN, XI_DEC_BAYER: return value not XI_OK: %d", xiStatus);
-			sleep(4);
-		}
-    xiGetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, &decimation_multiplier);
-    printf("previous XI_PRM_DECIMATION_HORIZONTAL multiplier: %d\n",decimation_multiplier); 
-    xiSetParamInt(xiH, XI_PRM_DECIMATION_HORIZONTAL, decimationMultiplierToSet);
-    if(xiStatus != XI_OK)
-		{
-			printf(" XI_PRM_DECIMATION_HORIZONTAL := %d: return value not XI_OK: %d", decimationMultiplierToSet,xiStatus);
-			sleep(4);
-		}
-
-
-    return xiStatus == XI_OK;
-
+    //free slot for reusal:
+    currentCudaFrameData->slotIsUsedInPreprocessing=false;
 }
 
 
 
+ 
 
 
 
 
+
+
+
+//-----------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
-
-
-  // Initialize XI_IMG structure
-  XI_IMG image;
-  memset(&image, 0, sizeof(XI_IMG));
-  image.size = sizeof(XI_IMG);
-
-  HANDLE xiH = NULL;
-  XI_RETURN stat = XI_OK;
-
   // Simplyfied error handling (just for demonstration)
   try
   {
+    gst_init(&argc, &argv);
 
-
-
-    int cfa = 0;
-    int OCVbayer = 0;
-
-    // Get device handle for the camera
-    stat =  xiOpenDevice(0, &xiH);
-    if (stat != XI_OK)
-      throw "Opening device failed";
-
-
-
-    lirena_setDownsamplingParams(xiH);
-
-
-	  // Get type of camera color filter
-    stat = xiGetParamInt(xiH, XI_PRM_COLOR_FILTER_ARRAY, &cfa);
-    if (stat != XI_OK)
-      throw "Could not get color filter array from camera";
-
-	  // Set correct demosaicing type according to camera color filter
-    switch (cfa) {
-    case XI_CFA_BAYER_RGGB:
-    {
-      cout << "BAYER_RGGB color filter." << endl;
-      OCVbayer = COLOR_BayerRG2BGR;
-      break;
-    }
-    case XI_CFA_BAYER_BGGR:
-    {
-      cout << "BAYER_BGGR color filter." << endl;
-      OCVbayer = COLOR_BayerBG2BGR;
-      break;
-    }
-    case XI_CFA_BAYER_GRBG:
-    {
-      cout<<"BAYER_GRBG color filter." << endl;
-      OCVbayer = COLOR_BayerGR2BGR;
-      break;
-    }
-    case XI_CFA_BAYER_GBRG:
-    {
-      cout<<"BAYER_GBRG color filter." << endl;
-      OCVbayer = COLOR_BayerGB2BGR;
-      break;
-    }
-    default:
-    {
-      throw "Not supported color filter for demosaicing.";
-    }
-    }
+    // init app state:
+    HackApplication*  appState = new HackApplication(argc, argv);
     
-    // Use transport data format (no processing done by the API)
-    stat = xiSetParamInt(xiH, XI_PRM_IMAGE_DATA_FORMAT, XI_FRM_TRANSPORT_DATA);
-    if (stat != XI_OK)
-      throw "Setting image data format failed";
-        
-    // Make data from the camera stream to zerocopy memory
-    stat = xiSetParamInt(xiH, XI_PRM_TRANSPORT_DATA_TARGET, XI_TRANSPORT_DATA_TARGET_ZEROCOPY);
-    if (stat != XI_OK)
-      throw "Setting transport data target failed";
-
-    // Using 8-bit images here
-    stat = xiSetParamInt(xiH, XI_PRM_OUTPUT_DATA_BIT_DEPTH, 8);
-    if (stat != XI_OK)
-      throw "Setting bit depth failed";
-    
-    
-    // Exposure 7 ms --> more than 120 fps (if no other bottleneck is there)
-    stat = xiSetParamInt(xiH, XI_PRM_EXPOSURE, 7000);
-    if (stat != XI_OK)
-      throw "Setting exposure failed";
-      
-    // gain
-    float mingain, maxgain;	
-    xiGetParamFloat(xiH, XI_PRM_GAIN XI_PRM_INFO_MIN, &mingain);
-    xiGetParamFloat(xiH, XI_PRM_GAIN XI_PRM_INFO_MAX, &maxgain);
-    float mygain = mingain +  (maxgain - mingain) * 1.0f;
-    xiSetParamFloat(xiH, XI_PRM_GAIN, mygain);     
-      
-
-
-    // do auto whitebalance -> sems not applied to image, 
-    // but the three multipliers are in aquried image struct (?)
-    stat = xiSetParamInt(xiH, XI_PRM_AUTO_WB, 
-      //0
-      XI_ON
-    );
-    if (stat != XI_OK)
-      throw "Setting auto white balance failed";
-
-    // xiSetParamFloat(xiH, XI_PRM_WB_KR, WB_RED);
-    // xiSetParamFloat(xiH, XI_PRM_WB_KG, WB_GREEN);
-    // xiSetParamFloat(xiH, XI_PRM_WB_KB, WB_BLUE);
+    lirena_setupCudaState(appState);
 
 
 
 
-
-    // Get width of image
-    int width = -1;
-    stat = xiGetParamInt(xiH, XI_PRM_WIDTH, &width);
-    if (stat != XI_OK)
-      throw "Could not get image width from camera";    
-
-    // Get height of image
-    int height = -1;
-    stat = xiGetParamInt(xiH, XI_PRM_HEIGHT, &height);
-    if (stat != XI_OK)
-      throw "Could not get image height from camera";
-
-    
+    appState->xiCam.startAcquisition();
 
 
-
-
-    //{ init app state:
-    StandaloneApplicationState globalAppState(argc, argv);
-
-    
-      globalAppState.cudaDemoisaicStream = cv::cuda::Stream();
-      
-      globalAppState.cudaFrameDataArray = 
-        new CudaFrameData[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
-         
-      // init GpuMats in case they are repurposed later without reinit:
-      for(int i = 0; i < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES; i++)
-      {
-        CudaFrameData * currentCudaFrameData = 
-          & (globalAppState.cudaFrameDataArray[i]);
-      
-        currentCudaFrameData->appStatePtr = &globalAppState;
-
-
-        currentCudaFrameData->setupCropRect(height,width, &globalAppState.config);
-
-
-        currentCudaFrameData->gpuRawMatrix = 
-          cuda::GpuMat(height, width, CV_8UC1);  
-        
-
-        #if DO_USE_CROP_INSTEAD_RESIZE
-          
-          currentCudaFrameData->gpuCroppedRawMatrixRef =
-            cuda::GpuMat(
-              currentCudaFrameData->cropRectangle.height,
-              currentCudaFrameData->cropRectangle.width,
-              CV_8UC1 
-            );
-
-            currentCudaFrameData->gpuCroppedColorMatrix =
-            cuda::GpuMat(
-              currentCudaFrameData->cropRectangle.height,
-              currentCudaFrameData->cropRectangle.width,
-              CV_8UC3
-            );
-
-
-        currentCudaFrameData->cpuCroppedColorMatrix =
-          cv::Mat(
-            currentCudaFrameData->cropRectangle.height,
-            currentCudaFrameData->cropRectangle.width,
-            CV_8UC3
-        );
-
-        #else
-
-        currentCudaFrameData->gpuColorMatrix =
-          cuda::GpuMat(height, width, CV_8UC3);
-
-        currentCudaFrameData->gpuResizedColorMatrix =
-          cuda::GpuMat(
-            globalAppState.config.targetResolutionY > 0 
-              ? 
-              globalAppState.config.targetResolutionY
-              : height,
-            globalAppState.config.targetResolutionX > 0 
-              ? 
-              globalAppState.config.targetResolutionX
-              : width,
-            CV_8UC3);
-        
-        currentCudaFrameData->cpuResizedColorMatrix =
-          cv::Mat(
-            globalAppState.config.targetResolutionY > 0 
-              ? 
-              globalAppState.config.targetResolutionY
-              : height,
-            globalAppState.config.targetResolutionX > 0 
-              ? 
-              globalAppState.config.targetResolutionX
-              : width,
-            CV_8UC3);
-
-        #endif
-
-      }
-    //}
-
-
-    printf("SENSOR resolution to be fed into GStreamer:      %dx%d\n", width, height);
-    printf("GPU-cropped resolution to be fed into GStreamer: %dx%d\n", 
-      globalAppState.cudaFrameDataArray[0].cropRectangle.width, 
-      globalAppState.cudaFrameDataArray[0].cropRectangle.height);
-
-
-
-
-    // Start the image acquisition
-    stat = xiStartAcquisition(xiH);
-    if (stat != XI_OK)
-    {
-      throw "Starting image acquisition failed";
-    }
-    
-
-
-    if(globalAppState.config.doLocalDisplay)
-    {
-        // Create a GUI window with OpenGL support
-        namedWindow("XIMEA camera", WINDOW_OPENGL);
-        // OpenGL window makes problems!
-        //namedWindow("XIMEA camera");
-        resizeWindow("XIMEA camera", width/4, height/4);
-        //resizeWindow("XIMEA camera", 1600 , 1000);
-    }
+    // display is now done by gstreamer
+    // if(appState->config.doLocalDisplay)
+    // {
+    //     // Create a GUI window with OpenGL support
+    //     namedWindow("XIMEA camera", WINDOW_OPENGL);
+    //     // OpenGL window makes problems!
+    //     //namedWindow("XIMEA camera");
+    //     resizeWindow( 
+    //       "XIMEA camera", 
+    //       appState->config.getStreamingResolutionX()/4,
+    //       appState->config.getStreamingResolutionY()/4
+    //     );
+    //     //resizeWindow("XIMEA camera", 1600 , 1000);
+    // }
  
-    // Define pointer used for (CUDA) data on GPU
-    //void *imageGpu;
 
 
 
-
+    runAcquisitionLoop(appState);
   
-  
-    globalAppState.prev_time = getcurus();
+
+    
+
+    //cleanup;
+    delete appState;
+     
+    // Print errors
+   }catch(const char* message)
+   {
+    std::cerr << message << std::endl;
+   }
+
+}
+
+
+
+
+
+
+bool runAcquisitionLoop(HackApplication * appState)
+{
+    appState->prev_time = getcurus();
+
+    XI_RETURN xiStatus = XI_OK;
   
     // Acquire a number of images, process and render them
-    for (int i = 0; i < NUMBER_OF_IMAGES; i++)
+    //for (int i = 0; i < NUMBER_OF_IMAGES; i++)
+    for(;;) // run indefinitely
     {
+      XI_IMG& xiImgRef = appState->xiCam.acquireNewFrame();
     
-      // Get host-pointer to image data
-      stat = xiGetImage(xiH, 5000, &image);
-      if (stat != XI_OK)
-      {
-        throw "Getting image from camera failed";
-      }
- 
+
       //{ trying to parallelize cam image acquisition and cuda processing:
       int currentGpuMatIndex = 0;
       while(currentGpuMatIndex < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES)
       {
         // is slot already used?
-        if(globalAppState.cudaFrameDataArray[currentGpuMatIndex].slotIsUsed)
+        if(appState->cudaFrameDataArray[currentGpuMatIndex].slotIsUsedInPreprocessing)
         {
             currentGpuMatIndex++;
         }
         else
         {
           // set slot to "used" and stop checking the rest
-          globalAppState.cudaFrameDataArray[currentGpuMatIndex].slotIsUsed = 
+          appState->cudaFrameDataArray[currentGpuMatIndex].slotIsUsedInPreprocessing = 
             true;
           break;
         }
@@ -591,20 +407,20 @@ int main(int argc, char **argv)
 
 
       CudaFrameData * currentCudaFrameData = 
-        & (globalAppState.cudaFrameDataArray[currentGpuMatIndex]);
+        & (appState->cudaFrameDataArray[currentGpuMatIndex]);
 
       currentCudaFrameData->bufferIndex = currentGpuMatIndex;
-      currentCudaFrameData->slotIsUsed = true;
+      currentCudaFrameData->slotIsUsedInPreprocessing = true;
         
 
       //{ Blocking impl:
       /*
       // Convert Ximea image to cuda device pointer
       cudaHostGetDevicePointer(
-        &currentCudaFrameData->cudaHostMemory, image.bp, 0);
+        &currentCudaFrameData->cudaHostMemoryForXiImage, appState->xiImage.bp, 0);
       // Create GpuMat from the cuda device pointer
       currentCudaFrameData->gpuRawMatrix =
-        cuda::GpuMat(height, width, CV_8UC1, &currentCudaFrameData->cudaHostMemory); 
+        cuda::GpuMat(height, width, CV_8UC1, &currentCudaFrameData->cudaHostMemoryForXiImage); 
       // Create GpuMat for the result image
       currentCudaFrameData->gpuColorMatrix =
         cuda::GpuMat(height, width, CV_8UC3); 
@@ -613,23 +429,29 @@ int main(int argc, char **argv)
       
       //{ Non-Blocking impl:
       cudaHostGetDevicePointer(
-        &currentCudaFrameData->cudaHostMemory, image.bp, 0);
+        &currentCudaFrameData->cudaHostMemoryForXiImage, 
+        xiImgRef.bp, 
+        0);
       //CudaMem hostSrc(height, width, CV_8UC1, CudaMem::ALLOC_PAGE_LOCKED);
 
       // upload data from host: 
       // wrapper arond host mem:   
-      const int	sizes[] = {height, width};
+      const int	sizes[] = {
+        appState->config.ximeaparams.activeSensorResolutionY, 
+        appState->config.ximeaparams.activeSensorResolutionX
+      };
+
       currentCudaFrameData->hostRawMat =
         cv::Mat(
           2, //int 	ndims,
           sizes, //const int * 	sizes,
           CV_8UC1, //int 	type,
-          currentCudaFrameData->cudaHostMemory, // void * 	data,
+          currentCudaFrameData->cudaHostMemoryForXiImage, // void * 	data,
           0 //const size_t * 	steps = 0 
         ); 
       currentCudaFrameData->gpuRawMatrix.upload(
         cv::InputArray(currentCudaFrameData->hostRawMat),
-        globalAppState.cudaDemoisaicStream);
+        appState->cudaDemoisaicStream);
       //}
 
 
@@ -644,9 +466,9 @@ int main(int argc, char **argv)
       cuda::demosaicing(
         currentCudaFrameData->gpuCroppedRawMatrixRef, 
         currentCudaFrameData->gpuCroppedColorMatrix, 
-        OCVbayer, 
-        0, // derive channel layout from other params
-        globalAppState.cudaDemoisaicStream 
+        appState->xiCam.getOcvBayerPattern(), 
+        4,  //four channels, because nvvidconv and segfaults   //0, // derive channel layout from other params
+        appState->cudaDemoisaicStream 
       );
 
       #if SHOW_CPUMAT_INSTEAD_GPUMAT 
@@ -655,7 +477,7 @@ int main(int argc, char **argv)
         currentCudaFrameData->gpuCroppedColorMatrix.download(
           //cv::OutputArray(currentCudaFrameData->cpuResizedColorMatrix),
           currentCudaFrameData->cpuCroppedColorMatrix,
-          globalAppState.cudaDemoisaicStream);
+          appState->cudaDemoisaicStream);
 
       #endif // SHOW_CPUMAT_INSTEAD_GPUMAT 
 
@@ -669,9 +491,9 @@ int main(int argc, char **argv)
       cuda::demosaicing(
         currentCudaFrameData->gpuRawMatrix, 
         currentCudaFrameData->gpuColorMatrix, 
-        OCVbayer, 
+        appState->OCVbayerPattern, 
         0, // derive channel layout from other params
-        globalAppState.cudaDemoisaicStream 
+        appState->cudaDemoisaicStream 
       );
      
       //  all allways 1 even with auto wb enabled 0o
@@ -690,7 +512,7 @@ int main(int argc, char **argv)
       //     currentCudaFrameData->gpuColorMatrix,
       //     1.0, 
       //     -1,
-      //     globalAppState.cudaDemoisaicStream
+      //     appState->cudaDemoisaicStream
       //   );
       // }
 
@@ -701,17 +523,17 @@ int main(int argc, char **argv)
         currentCudaFrameData->gpuColorMatrix,
         currentCudaFrameData->gpuResizedColorMatrix,
         Size( 
-          globalAppState.config.targetResolutionY > 0 
-            ? globalAppState.config.targetResolutionY
+          appState->config.targetResolutionY > 0 
+            ? appState->config.targetResolutionY
             : height,
-          globalAppState.config.targetResolutionX > 0 
-            ? globalAppState.config.targetResolutionX
+          appState->config.targetResolutionX > 0 
+            ? appState->config.targetResolutionX
             : width
           ),
           0, 
           0, 
           INTER_LINEAR,
-          globalAppState.cudaDemoisaicStream
+          appState->cudaDemoisaicStream
       );
       
       #if SHOW_CPUMAT_INSTEAD_GPUMAT 
@@ -720,132 +542,221 @@ int main(int argc, char **argv)
         currentCudaFrameData->gpuResizedColorMatrix.download(
           //cv::OutputArray(currentCudaFrameData->cpuResizedColorMatrix),
           currentCudaFrameData->cpuResizedColorMatrix,
-          globalAppState.cudaDemoisaicStream);
+          appState->cudaDemoisaicStream);
 
       #endif // SHOW_CPUMAT_INSTEAD_GPUMAT 
 
-#endif
+      #endif
 
-   
-      globalAppState.cudaDemoisaicStream.enqueueHostCallback(	
-        cudaDemosaicStreamCallback, // StreamCallback 	callback,
-        currentCudaFrameData // void * 	userData 
-      );
-
+        appState->cudaDemoisaicStream.enqueueHostCallback(
+            cudaDemosaicStreamCallback, // StreamCallback 	callback,
+            currentCudaFrameData        // void * 	userData
+        );
 
 
 
-      //{ FPS calcs: ----------------------------------------------------------
-	  globalAppState.current_captured_frame_count++;
-	  if(image.nframe > globalAppState.last_camera_frame_count)
-	  {
-			globalAppState.lost_frames_count += image.nframe - (globalAppState.last_camera_frame_count + 1);
-	  } 
-	  globalAppState.last_camera_frame_count = image.nframe;
-      globalAppState.current_time = getcurus();
-      //update around each second:
-	  if(globalAppState.current_time - globalAppState.prev_time > 1000000) 
-	  {
-			snprintf(
-			    globalAppState.status_string, 
-			    STATUS_STRING_LENGTH, 
-			    "Acquisition [ Acquired: %lu, processed: %lu, skipped: %lu, fps: %.2f ]\n", 
-			    globalAppState.current_captured_frame_count, 
-			    globalAppState.cuda_processed_frame_count,
-			    globalAppState.lost_frames_count, 
-			    1000000.0 * 
-			      (globalAppState.current_captured_frame_count - globalAppState.prev_captured_frame_count) 
-			     / (globalAppState.current_time - globalAppState.prev_time)
-			);
-			printf("%s",globalAppState.status_string);
-			
-			globalAppState.prev_captured_frame_count = globalAppState.current_captured_frame_count;
-			globalAppState.prev_time = globalAppState.current_time;  
-	  }
-      //}  --------------------------------------------------------------------
-
-
-
-     if(globalAppState.config.doLocalDisplay)
-     {   
-        // Render image to the screen (using OpenGL) 
-        //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
-        
-        //only show every nth frame:
-        //if(globalAppState.cuda_processed_frame_count % 3 == 0)
+        //{ FPS calcs: ----------------------------------------------------------
+        appState->current_captured_frame_count++;
+        if (xiImgRef.nframe 
+            > 
+            appState->last_camera_frame_count)
         {
-            //block for show:
-            globalAppState.cudaDemoisaicStream.waitForCompletion();
+          appState->lost_frames_count += 
+            xiImgRef.nframe 
+            - 
+            (appState->last_camera_frame_count + 1);
+        }
+        appState->last_camera_frame_count = xiImgRef.nframe;
+        appState->current_time = getcurus();
+        //update around each second:
+        if (appState->current_time - appState->prev_time > 1000000)
+        {
+          snprintf(
+              appState->status_string,
+              STATUS_STRING_LENGTH,
+              "Acquisition [ Acquired: %lu, processed: %lu, skipped: %lu, fps: %.2f ]\n",
+              appState->current_captured_frame_count,
+              appState->cuda_processed_frame_count,
+              appState->lost_frames_count,
+              1000000.0 *
+                  (appState->current_captured_frame_count 
+                  - 
+                  appState->prev_captured_frame_count) 
+                  / 
+                  (appState->current_time - appState->prev_time));
+          printf("%s", appState->status_string);
+
+          appState->prev_captured_frame_count = appState->current_captured_frame_count;
+          appState->prev_time = appState->current_time;
+        }
+        //}  --------------------------------------------------------------------
+
+        // display is now done by gstreamer
+        // if (appState->config.doLocalDisplay)
+        // {
+        //   // Render image to the screen (using OpenGL)
+        //   //imshow("XIMEA camera", currentCudaFrameData->gpuColorMatrix);
+
+        //   //only show every nth frame:
+        //   //if(appState->cuda_processed_frame_count % 3 == 0)
+        //   {
+        //     //block for show:
+        //     appState->cudaDemoisaicStream.waitForCompletion();
             
-            #if SHOW_CPUMAT_INSTEAD_GPUMAT 
+        //     #if SHOW_CPUMAT_INSTEAD_GPUMAT 
       
-              imshow("XIMEA camera", 
-                //currentCudaFrameData->gpuColorMatrix
-                #if DO_USE_CROP_INSTEAD_RESIZE
-                  currentCudaFrameData->cpuCroppedColorMatrix
-                #else // DO_USE_CROP_INSTEAD_RESIZE
-                  currentCudaFrameData->cpuResizedColorMatrix
-                #endif // DO_USE_CROP_INSTEAD_RESIZE
-              );
+        //       imshow("XIMEA camera", 
+        //         //currentCudaFrameData->gpuColorMatrix
+        //         #if DO_USE_CROP_INSTEAD_RESIZE
+        //           currentCudaFrameData->cpuCroppedColorMatrix
+        //         #else // DO_USE_CROP_INSTEAD_RESIZE
+        //           currentCudaFrameData->cpuResizedColorMatrix
+        //         #endif // DO_USE_CROP_INSTEAD_RESIZE
+        //       );
             
-            #else // SHOW_CPUMAT_INSTEAD_GPUMAT
+        //     #else // SHOW_CPUMAT_INSTEAD_GPUMAT
 
-              imshow("XIMEA camera", 
-                //currentCudaFrameData->gpuColorMatrix
-                #if DO_USE_CROP_INSTEAD_RESIZE
-                currentCudaFrameData->gpuCroppedColorMatrix
-                #else // DO_USE_CROP_INSTEAD_RESIZE
-                currentCudaFrameData->gpuResizedColorMatrix
-                #endif // DO_USE_CROP_INSTEAD_RESIZE
-              );
+        //       imshow("XIMEA camera", 
+        //         //currentCudaFrameData->gpuColorMatrix
+        //         #if DO_USE_CROP_INSTEAD_RESIZE
+        //         currentCudaFrameData->gpuCroppedColorMatrix
+        //         #else // DO_USE_CROP_INSTEAD_RESIZE
+        //         currentCudaFrameData->gpuResizedColorMatrix
+        //         #endif // DO_USE_CROP_INSTEAD_RESIZE
+        //       );
 
-            #endif // SHOW_CPUMAT_INSTEAD_GPUMAT 
-       }
-     }
+        //     #endif // SHOW_CPUMAT_INSTEAD_GPUMAT 
+        //   }
+        // }
 
 
-      /* outsourced to cuda callback
-      if(DO_SHOW_IMAGE)
-      {
-          // Render image to the screen (using OpenGL) 
-          imshow("XIMEA camera", gpu_mat_color); 
-           
-          //imshow("XIMEA camera", gpu_mat_raw);      
-          //test without OpenGL:
-          //imshow("XIMEA camera non-GL", debugCPURawMat);      
-      }
-      */
-      
-      
-      /*
-      //{  pure CPU test: for debugging if cuda makes problems:  --------------
-      // answer: cuda works fine, but OpenCV has problems with Qt5:
-      // https://forums.developer.nvidia.com/t/black-images-with-qt5-and-opengl/70864/7
-      // Building with QT4 resolves the issues!
-      
-      //https://docs.opencv.org/master/d3/d63/classcv_1_1Mat.html#a5fafc033e089143062fd31015b5d0f40
-      cv::Mat debugCPURawMat(
-        2, //int 	ndims,
-        sizes, //const int * 	sizes,
-        CV_8UC1, //int 	type,
-        image.bp, // void * 	data,
-        0 //const size_t * 	steps = 0 
-      );
-      cv::InputArray debugCPURawCVImage(debugCPURawMat);
-      //} ---------------------------------------------------------------------
-      */
       
       // prevent window gray-out
       waitKey(1);
-    }
-    
-    // Stop image acquitsition and close device
-    xiStopAcquisition(xiH);
-    xiCloseDevice(xiH); 
-     
-    // Print errors
-   }catch(const char* message){
-    std::cerr << message << std::endl;
-   }
+    }  
+
+
+    return xiStatus == XI_OK;
+}
+
+
+
+
+
+bool lirena_setupCudaState(HackApplication *appState)
+{
+  appState->cudaDemoisaicStream = cv::cuda::Stream();
+
+  appState->cudaFrameDataArray =
+      new CudaFrameData[MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES];
+
+  // init GpuMats in case they are repurposed later without reinit:
+  for (int i = 0; i < MAX_ENQUEUED_CUDA_DEMOSAIC_IMAGES; i++)
+  {
+    CudaFrameData *currentCudaFrameData =
+        &(appState->cudaFrameDataArray[i]);
+
+    currentCudaFrameData->appPtr = appState;
+
+    currentCudaFrameData->setupCropRect(&appState->config);
+
+    currentCudaFrameData->gpuRawMatrix =
+        cuda::GpuMat(
+          //full resolution
+          appState->config.ximeaparams.activeSensorResolutionY,
+          appState->config.ximeaparams.activeSensorResolutionX,
+          CV_8UC1);
+
+#if DO_USE_CROP_INSTEAD_RESIZE
+
+    currentCudaFrameData->gpuCroppedRawMatrixRef =
+        cuda::GpuMat(
+            currentCudaFrameData->cropRectangle.height,
+            currentCudaFrameData->cropRectangle.width,
+            CV_8UC1);
+
+    currentCudaFrameData->gpuCroppedColorMatrix =
+        cuda::GpuMat(
+            currentCudaFrameData->cropRectangle.height,
+            currentCudaFrameData->cropRectangle.width,
+            //CV_8UC3
+            // test because segfault
+            CV_8UC4
+
+    );
+
+    // currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem =
+    //     (gchar *)g_malloc(
+    //         currentCudaFrameData->cropRectangle.height 
+    //         * currentCudaFrameData->cropRectangle.width 
+    //         * 4 //RGBx = four bytes
+    //     );
+
+    currentCudaFrameData->cpuCroppedColorMatrix =
+        cv::Mat(
+            currentCudaFrameData->cropRectangle.height,
+            currentCudaFrameData->cropRectangle.width,
+            //CV_8UC3
+            // need to be 32bit RGBx/GBRx/xRGB for nvvidconv
+            CV_8UC4
+            //,
+            //provide self-managed memory
+            //currentCudaFrameData->cpuCroppedColorMatrix_selfAllocedHeapMem
+    );
+
+
+
+
+#else
+
+    currentCudaFrameData->gpuColorMatrix =
+        cuda::GpuMat(height, width, CV_8UC3);
+
+    currentCudaFrameData->gpuResizedColorMatrix =
+        cuda::GpuMat(
+            appState->config.targetResolutionY > 0
+                ? appState->config.targetResolutionY
+                : height,
+            appState->config.targetResolutionX > 0
+                ? appState->config.targetResolutionX
+                : width,
+            CV_8UC3);
+
+    currentCudaFrameData->cpuResizedColorMatrix =
+        cv::Mat(
+            appState->config.targetResolutionY > 0
+                ? appState->config.targetResolutionY
+                : height,
+            appState->config.targetResolutionX > 0
+                ? appState->config.targetResolutionX
+                : width,
+            CV_8UC3);
+
+#endif
+  }
+
+    printf("SENSOR resolution to be fed into cv::cuda preprocessing:      %dx%d\n",
+      appState->config.ximeaparams.activeSensorResolutionX,
+      appState->config.ximeaparams.activeSensorResolutionY
+    );
+    printf("GPU-cropped resolution to be fed into GStreamer:              %dx%d\n",
+          appState->cudaFrameDataArray[0].cropRectangle.width,
+          appState->cudaFrameDataArray[0].cropRectangle.height);
+
+
+  //}
+
+
+  //TODO do cuda error checking
+  return true;
+
 
 }
+
+
+
+
+
+
+
+

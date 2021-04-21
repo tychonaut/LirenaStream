@@ -1,11 +1,6 @@
 #!/bin/bash
 
 
-
-
-
-
-
 # works:  real Cam sensor res:
 mySensorResX=5328
 mySensorResY=4608
@@ -15,6 +10,11 @@ mySensorResY=4608
 #  https://en.wikipedia.org/wiki/List_of_common_resolutions
 myStreamingResX=4096
 myStreamingResY=3112
+
+
+
+#mySensorHalfResX=2664
+#mySensorHalfResY=2304
 
 
 #mySensorResX=1920
@@ -49,7 +49,7 @@ numtotalFrames=32
 #TODO make first nvvidconv crop instead of resize!
 #TODO check if non-in-plce stuff can work with nvivafilter
 
-GST_DEBUG=4 \
+GST_DEBUG=2 \
 gst-launch-1.0 \
     videotestsrc num-buffers=${numtotalFrames}  do-timestamp=true !  \
         "video/x-raw,width=${mySensorResX},height=${mySensorResY},framerate=${myTargetFPS}/1" ! \
@@ -78,4 +78,7 @@ gst-launch-1.0 \
 
 
 exit 0
+
+    fpsdisplaysink fpsdisplaysink="nvoverlaysink"  \
+
 

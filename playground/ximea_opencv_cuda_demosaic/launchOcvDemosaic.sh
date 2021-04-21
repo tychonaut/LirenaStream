@@ -18,23 +18,30 @@ myResY=3112
 #{ works! full fps (26.x) (WITH CPU upload, but WITHOUT local display!)
 #  Resolution name: "Full Aperture 4x"
 #  https://en.wikipedia.org/wiki/List_of_common_resolutions
-#works?
 myResX=4096
-#works?
 myResY=3112
 #}
 
+
+#half res when testing sensor pixel halfing ("decimation) 
+# (no CLI param yet, have to change DO_USE_SENSOR_DECIMATION in C++ source file)
+#myResX=2048
+#myResY=1556
 
 
 ninja -C build/ 
 
 __GL_SYNC_TO_VBLANK=0 \
+GST_DEBUG=2 \
 ./build/ocvDemosaic \
-     192.168.1.101 5001 \
+     192.168.0.102 5001 \
      --targetResolutionX=${myResX} \
      --targetResolutionY=${myResY} \
-     $@
+     --exposure=4 \
+     --output=myAss2.mpg \
+     $@ \
+     --localdisplay \
 
 exit 0
 
-     --localdisplay
+

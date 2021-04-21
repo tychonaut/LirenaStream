@@ -21,7 +21,8 @@ struct LirenaCaptureApp
 {
 	LirenaConfig config;
 
-    LirenaXimeaStreamer streamer;    
+    LirenaXimeaStreamer streamer;
+
     
     // non-GUI loop for bus-listening,
     // in case local displaying is not requested;

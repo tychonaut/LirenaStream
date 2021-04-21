@@ -229,7 +229,7 @@ void * lirena_XimeaStreamer_captureThread_run(void *appVoidPtr)
 	GstCaps *size_caps = 0;
 	//GstCaps *appsrc_klv_caps = 0;
 
-	GstFlowReturn ret;
+	GstFlowReturn ret; 
 
 	int max_width = 1000;
 	int max_height = 1000;
