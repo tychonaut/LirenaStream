@@ -140,6 +140,13 @@ sudo aptitude upgrade
 ###############################################################################
 # Setup remote access: Teamviewer, SSH, ...
 
+
+###############################################################################
+# Remote access cluster via SSH
+
+# -----------------------------------------------------------------------------
+# Your personal machine to Streamer(x86) and Jetsons:
+
 # enable SSH in streaming x86 machine (reqiures password):
 # follow:
 # https://phoenixnap.com/kb/how-to-enable-ssh-on-ubuntu
@@ -166,25 +173,29 @@ ssh-copy-id -p 22 -i ~/.ssh/id_ed25519.pub nvidia@192.168.0.90
 ssh -p 22  nvidia@192.168.0.90
 
 
-#generate ssh key on the  streamer x86 machine:
-ssh-keygen -t ed25519 -C "lighthouse-streamer(x86_64): for passwordless SSH into Jetsons and as deploy key for Github"
+
+# -----------------------------------------------------------------------------
+# Frome Streamer Machine to Jetsons:
+
+#similar stuff on the streamer machine itself in order to SSH into the jetsons:
+# generate ssh key on the  streamer x86 machine:
+ssh-keygen -t ed25519 -C "lighthouse-streamer(x86_64): for passwordless SSH into Jetsons"
 # copy and access like above for your own machine(s) ...
 
-# generate ssh key on a Jetson:
-# (Special file name here, because the default filename belongs to Markus' personal 
-#  "Master key for all his github repos")
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github_deploy -C "Jetson TX2: As deploy key for Github"
-# copy and access like above for your own machine(s) ...
 
 
+###############################################################################
+# Remote desktop on Streamer (x86):
 
-
+# -----------------------------------------------------------------------------
 # Teamviewer on host: Follow:
 # https://linuxize.com/post/how-to-install-teamviewer-on-ubuntu-18-04/
 # :
 wget https://download.teamviewer.com/download/linux/teamviewer_amd64.deb
 # etc.
 # Ask Markus Schlueter about login credentials for teamviewer.
+
+
 
 
 ###############################################################################
@@ -333,7 +344,7 @@ cd jetsonPhotoDump/
 scp nvidia@192.168.0.90:/home/nvidia/Documents/instantsave/* .
 
 #-----------------------------------------------------------------------------
-# view downloade images on Streaming PC:
+# View downloaded images on Streaming PC:
 eog .
 
 
@@ -355,25 +366,79 @@ eog .
 # No time for that: Hence, living directly out of the development git repo 
 # everywhere.
 
-#ä if not already done above: generate SSH keys on the machines that should be able
+# generate SSH keys on the machines that should be able
 # to git push and pull without Markus' personal password:
 
-#generate ssh key on the  streamer x86 machine:
-ssh-keygen -t ed25519 -C "lighthouse-streamer(x86_64): for passwordless SSH into Jetsons and as deploy key for Github"
-# copy and access like above for your own machine(s) ...
+
+###############################################################################
+# for streamer (x86)
+
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github_deploy_LirenaStream -C "lighthouse-streamer(x86_64): Deploy key for LirenaStream"
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github_deploy_MultiOSCluster -C "lighthouse-streamer(x86_64): Deploy key for MultiOSCluster"
+
+#'Register the last twoe public keys as  deploy keys on github:
+# Go to github.com, login.
+# E.g. the github repo for Streaming with ximea cams and Jetson TX2 (LirenaStream):
+# Visit  https://github.com/tychonaut/LirenaStream/settings/keys
+# work through:
+# https://docs.github.com/en/developers/overview/managing-deploy-keys#deploy-keys
+
+
+# config the differnt local SSH keys so that the correct one is presented to git:
+# Follow:
+# https://www.fabian-keller.de/blog/configuring-a-different-ssh-key-per-git-repository/
+
+nano ~/.ssh/config_LirenaStream
+
+#fill with:
+
+# https://www.fabian-keller.de/blog/configuring-a-different-ssh-key-per-git-repository/
+Host github.com
+    HostName github.com
+    Port 22
+    User git
+    IdentityFile ~/.ssh/id_ed25519_github_deploy_LirenaStream
+
+
+
+nano ~/.ssh/config_MultiOSCluster
+
+#fill with:
+
+# https://www.fabian-keller.de/blog/configuring-a-different-ssh-key-per-git-repository/
+Host github.com
+    HostName github.com
+    Port 22
+    User git
+    IdentityFile ~/.ssh/id_ed25519_github_deploy_MultiOSCluster
+
+
+
+cd ~/devel/streaming
+git clone git@github.com:tychonaut/multiOSCluster.git
+cd multiOSCluster
+git config core.sshCommand "ssh -F ~/.ssh/config_MultiOSCluster"
+
+cd ~/devel/streaming
+git clone git@github.com:tychonaut/LirenaStream.git
+cd LirenaStream
+git config core.sshCommand "ssh -F ~/.ssh/config_LirenaStream"
+
+
+
+###############################################################################
+# for Jetsons:
+
 
 # generate ssh key on a Jetson:
 # (Special file name here, because the default filename belongs to Markus' personal 
 #  "Master key for all his github repos")
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github_deploy -C "Jetson TX2: As deploy key for Github"
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github_deploy_LirenaStream -C "Jetson TX2: Deploy key for LirenaStream"
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github_deploy_MultiOSCluster -C "Jetson TX2: Deploy key for MultiOSCluster"
 # copy and access like above for your own machine(s) ...
 
-# Go to github.com, login
-# E.g. the github repo for Streaming with ximea cams and Jetson TX2
-# Visit
-# https://github.com/tychonaut/LirenaStream/settings/keys
-# work through:
-# https://docs.github.com/en/developers/overview/managing-deploy-keys#deploy-keys
+# 
+git clone git@github.com:tychonaut/LirenaStream.git
 
 
 TODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODO
