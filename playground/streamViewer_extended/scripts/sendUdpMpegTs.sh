@@ -4,7 +4,7 @@
 #receiverIP=192.168.0.101
 
 # Markus' office PC
-receiverIP=192.168.0.102
+receiverIP=192.168.0.41
 
 ninja -C builddir  && \
 \

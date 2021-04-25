@@ -7,6 +7,14 @@
 #                 -> klv      -> fakesink (dump klv to console)
 #                             -> dump to disk
 
+#myDisplayResX=2048
+#myDisplayResY=1556
+
+myDisplayResX=1024
+myDisplayResY=778
+
+
+myOutputFilePath=./deepStream_000.mpg
 
 
 GST_DEBUG=0 \
@@ -20,7 +28,7 @@ gst-launch-1.0 \
   \
   fork_mp2ts_to_disk_and_show. ! \
   queue !   \
-  filesink location=./remoteOutput_010.mpg \
+  filesink location=${myOutputFilePath} \
   \
   fork_mp2ts_to_disk_and_show. ! \
   queue !   \
@@ -33,7 +41,7 @@ gst-launch-1.0 \
   avdec_h264 !   \
   videoconvert !   \
   videoscale !   \
-    video/x-raw,width=2048,height=1556 ! \
+    video/x-raw,width=${myDisplayResX},height=${myDisplayResY} ! \
   fpsdisplaysink  video-sink="xvimagesink" sync=false async-handling=true \
 
 exit 0

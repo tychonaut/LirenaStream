@@ -8,7 +8,7 @@
 GST_DEBUG=2 \
 __GL_SYNC_TO_VBLANK=0 \
 gst-launch-1.0  \
-  filesrc location=$(pwd)/myAss2.mpg ! \
+  filesrc location=$(pwd)/myLocalJetsonStreamDump_0.mpg ! \
   tee name=myT1 \
   \
   myT1. ! \
