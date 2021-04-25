@@ -1,4 +1,4 @@
-project('ximea_opencv_cuda_demosaic', 'c', 'cpp', version : '0.2.0')
+project('lirena_acquire', 'c', 'cpp', version : '0.2.0')
 
 cc = meson.get_compiler('c')
 
@@ -68,18 +68,17 @@ all_deps = [
 #hack: also use lirenaConfig:
 
 exe_source_files = [
-  'ocvDemosaic.cpp',
+  'src/LirenaAcquire.cpp',
   'src/LirenaHackStreamer.cpp',
   'src/LirenaHackXimeaCamera.cpp',
-  '../../LirenaCapture/src/LirenaConfig.cpp' 
+  'src/LirenaConfig.cpp' 
   ]
 
-executable('ocvDemosaic',
+executable('lirenaAcquire',
   exe_source_files,
   dependencies : all_deps,
   include_directories: [
     'include',
-    '../../LirenaCapture/include',
     '/usr/local/include/', 
     '/usr/local/cuda/include',
   ]

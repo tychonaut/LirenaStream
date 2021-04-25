@@ -23,6 +23,11 @@ myResY=3112
 #}
 
 
+myOutputFilePath=./deepStream_000.mpg
+
+
+
+
 #half res when testing sensor pixel halfing ("decimation) 
 # (no CLI param yet, have to change DO_USE_SENSOR_DECIMATION in C++ source file)
 #myResX=2048
@@ -35,7 +40,7 @@ ninja -C build/
 
 
 GST_DEBUG=0 \
-./build/ocvDemosaic \
+./build/lirenaAcquire \
      192.168.0.41 5001 \
      --targetResolutionX=${myResX} \
      --targetResolutionY=${myResY} \
@@ -44,7 +49,7 @@ GST_DEBUG=0 \
 
 exit 0
 
-     --output=localdump3.mpg \
+     --output=${myOutputFilePath} \
      $@ \
      --localdisplay \
 
