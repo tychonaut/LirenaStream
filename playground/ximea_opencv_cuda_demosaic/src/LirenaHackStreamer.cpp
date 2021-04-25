@@ -253,7 +253,7 @@ gchar *LirenaHackStreamer::constructPipelineString()
 
         " queue ! "
         //"   video/x-raw(memory:NVMM) ! " //,width=4096,height=3112 ! "
-        " nvv4l2h264enc maxperf-enable=1 !"
+        " nvv4l2h264enc maxperf-enable=1 bitrate=16000000 !"
         " h264parse  disable-passthrough=true ! " 
         " mpegtsmux name=mp2ts_muxer alignment=7 "
 
