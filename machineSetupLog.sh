@@ -439,9 +439,15 @@ ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github_deploy_MultiOSCluster -C "Jets
 
 # 
 git clone git@github.com:tychonaut/LirenaStream.git
+# etc. pp, just like on x86
 
 
-TODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODOTODO
+###############################################################################
+###############################################################################
+# Hardware accellerated nvenc/nvdec on x86:
+
+# http://lifestyletransfer.com/how-to-install-nvidia-gstreamer-plugins-nvenc-nvdec-on-ubuntu/
+
 
 
 

@@ -48,6 +48,10 @@ gst-launch-1.0 \
   
 exit 0
   
+  glcolorscale !\
+    "video/x-raw(memory:GLMemory),width=${myDisplayResX},height=${myDisplayResY}" ! \
+
+    "video/x-raw(memory:GLMemory),format=(string)RGBA,width=${myDisplayResX},height=${myDisplayResY}" ! \
   
   latency=50 ! 
   
@@ -55,8 +59,6 @@ exit 0
   sync=false async=true \
 
 
-    "video/x-raw(memory:GLMemory),format=(string)NV12" ! \
-    "video/x-raw(memory:GLMemory),format=(string)RGBA" ! \
 
   gtkglsink sync=false async=true \
   
